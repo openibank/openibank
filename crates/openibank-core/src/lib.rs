@@ -1,12 +1,14 @@
 //! OpeniBank Core - Canonical types and wallet primitives for AI-agent banking
 //!
 //! This crate implements the foundational economic primitives for OpeniBank:
+//! - OpeniBankProfile: AI-agent-only economic actor configuration
 //! - AssetObject: unified representation of crypto and non-crypto assets
 //! - BudgetPolicy: bounded spending authority for agents
 //! - SpendPermit: agent-native "currency of authority"
 //! - PaymentIntent: proposed payment before authorization
 //! - CommitmentReceipt: proof-carrying evidence of authorized actions
 //! - EvidenceBundle: inputs, attestations, and signatures for audit
+//! - EscrowManager: commitment-gated escrow operations
 //!
 //! # Architectural Invariants
 //!
@@ -16,15 +18,32 @@
 //! 4. All money-impacting actions emit verifiable receipts
 //! 5. Authority is always bounded
 //! 6. Fail closed
+//! 7. LLMs may propose intents, NEVER execute money
+//!
+//! # Resonance Ladder
+//!
+//! ```text
+//! Presence → Coupling → Meaning → Intent
+//!                                     ║
+//!                         ════════════╬═══════════════
+//!                         COMMITMENT BOUNDARY (accountability begins)
+//!                         ════════════╬═══════════════
+//!                                     ║
+//!                               Commitment → Consequence
+//! ```
 
 pub mod types;
 pub mod wallet;
 pub mod commitment;
 pub mod crypto;
 pub mod error;
+pub mod profile;
+pub mod escrow;
 
 pub use types::*;
 pub use wallet::*;
 pub use commitment::*;
 pub use crypto::*;
 pub use error::*;
+pub use profile::*;
+pub use escrow::*;

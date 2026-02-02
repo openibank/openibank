@@ -21,6 +21,6 @@ pub mod seller;
 pub mod arbiter;
 
 pub use brain::*;
-pub use buyer::*;
-pub use seller::*;
-pub use arbiter::*;
+pub use buyer::{BuyerAgent, BuyerError, ServiceOffer};
+pub use seller::{DeliveryProof, SellerAgent, SellerError, Service};
+pub use arbiter::{ArbiterAgent, ArbiterError, DecisionResult, DisputeCase};

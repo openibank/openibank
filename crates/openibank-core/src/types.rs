@@ -193,10 +193,13 @@ impl AssetObject {
 }
 
 // ============================================================================
-// Amount Type
+// Amount Types
 // ============================================================================
 
 /// Represents an amount of an asset (in smallest units, e.g., cents for USD)
+///
+/// This is the simple legacy type using u64. For high-precision amounts,
+/// use `AssetAmount` instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub struct Amount(pub u64);
 
@@ -220,12 +223,209 @@ impl Amount {
     pub fn is_zero(&self) -> bool {
         self.0 == 0
     }
+
+    /// Convert to AssetAmount with specified decimals
+    pub fn to_asset_amount(self, decimals: u8) -> AssetAmount {
+        AssetAmount {
+            value: self.0 as u128,
+            decimals,
+        }
+    }
 }
 
 impl std::fmt::Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Display as dollars with 2 decimal places (assuming cents)
         write!(f, "${:.2}", self.0 as f64 / 100.0)
+    }
+}
+
+// ============================================================================
+// High-Precision Asset Amount
+// ============================================================================
+
+/// Fixed-point decimal amount with configurable precision
+///
+/// Uses u128 for the value and u8 for decimal places, providing:
+/// - Support for very large amounts (up to 340 undecillion base units)
+/// - Configurable precision (0-18 decimal places typical)
+/// - Safe arithmetic with overflow checking
+/// - Display formatting respecting decimals
+///
+/// # Example
+///
+/// ```ignore
+/// // $100.50 with 2 decimals (like USD cents)
+/// let usd = AssetAmount::new(10050, 2);
+/// assert_eq!(usd.to_string(), "100.50");
+///
+/// // 1.5 ETH with 18 decimals
+/// let eth = AssetAmount::new(1_500_000_000_000_000_000, 18);
+/// assert_eq!(eth.to_string(), "1.500000000000000000");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetAmount {
+    /// Raw value in smallest units
+    pub value: u128,
+    /// Number of decimal places
+    pub decimals: u8,
+}
+
+impl AssetAmount {
+    /// Create a new AssetAmount
+    pub fn new(value: u128, decimals: u8) -> Self {
+        Self { value, decimals }
+    }
+
+    /// Create a zero amount with specified decimals
+    pub fn zero(decimals: u8) -> Self {
+        Self { value: 0, decimals }
+    }
+
+    /// Create from a human-readable amount (e.g., "100.50" -> 10050 with 2 decimals)
+    pub fn from_human(human_value: f64, decimals: u8) -> Self {
+        let multiplier = 10u128.pow(decimals as u32);
+        let value = (human_value * multiplier as f64) as u128;
+        Self { value, decimals }
+    }
+
+    /// Get the human-readable value (e.g., 10050 with 2 decimals -> 100.50)
+    pub fn to_human(&self) -> f64 {
+        let divisor = 10u128.pow(self.decimals as u32) as f64;
+        self.value as f64 / divisor
+    }
+
+    /// Check if the amount is zero
+    pub fn is_zero(&self) -> bool {
+        self.value == 0
+    }
+
+    /// Get the multiplier for this decimal precision
+    pub fn multiplier(&self) -> u128 {
+        10u128.pow(self.decimals as u32)
+    }
+
+    /// Scale this amount to a different decimal precision
+    pub fn scale_to(&self, target_decimals: u8) -> Option<Self> {
+        if target_decimals == self.decimals {
+            return Some(*self);
+        }
+
+        if target_decimals > self.decimals {
+            // Scale up (multiply)
+            let diff = target_decimals - self.decimals;
+            let multiplier = 10u128.pow(diff as u32);
+            self.value.checked_mul(multiplier).map(|v| Self {
+                value: v,
+                decimals: target_decimals,
+            })
+        } else {
+            // Scale down (divide with rounding)
+            let diff = self.decimals - target_decimals;
+            let divisor = 10u128.pow(diff as u32);
+            Some(Self {
+                value: self.value / divisor,
+                decimals: target_decimals,
+            })
+        }
+    }
+
+    /// Checked addition (amounts must have same decimals)
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        if self.decimals != other.decimals {
+            return None; // Decimals must match
+        }
+        self.value.checked_add(other.value).map(|v| Self {
+            value: v,
+            decimals: self.decimals,
+        })
+    }
+
+    /// Checked subtraction (amounts must have same decimals)
+    pub fn checked_sub(self, other: Self) -> Option<Self> {
+        if self.decimals != other.decimals {
+            return None;
+        }
+        self.value.checked_sub(other.value).map(|v| Self {
+            value: v,
+            decimals: self.decimals,
+        })
+    }
+
+    /// Checked multiplication by an integer
+    pub fn checked_mul(self, multiplier: u128) -> Option<Self> {
+        self.value.checked_mul(multiplier).map(|v| Self {
+            value: v,
+            decimals: self.decimals,
+        })
+    }
+
+    /// Checked division by an integer
+    pub fn checked_div(self, divisor: u128) -> Option<Self> {
+        if divisor == 0 {
+            return None;
+        }
+        Some(Self {
+            value: self.value / divisor,
+            decimals: self.decimals,
+        })
+    }
+
+    /// Convert to the legacy Amount type (truncates to u64)
+    pub fn to_amount(self) -> Option<Amount> {
+        if self.value <= u64::MAX as u128 {
+            Some(Amount(self.value as u64))
+        } else {
+            None
+        }
+    }
+
+    /// IUSD amount (2 decimal places like USD)
+    pub fn iusd(value: u128) -> Self {
+        Self { value, decimals: 2 }
+    }
+
+    /// IUSD from human-readable value
+    pub fn iusd_from_human(dollars: f64) -> Self {
+        Self::from_human(dollars, 2)
+    }
+}
+
+impl Default for AssetAmount {
+    fn default() -> Self {
+        Self::zero(2) // Default to 2 decimals like USD
+    }
+}
+
+impl std::fmt::Display for AssetAmount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.decimals == 0 {
+            write!(f, "{}", self.value)
+        } else {
+            let divisor = 10u128.pow(self.decimals as u32);
+            let whole = self.value / divisor;
+            let frac = self.value % divisor;
+            write!(f, "{}.{:0>width$}", whole, frac, width = self.decimals as usize)
+        }
+    }
+}
+
+impl PartialOrd for AssetAmount {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.decimals != other.decimals {
+            // Scale to compare
+            if let (Some(a), Some(b)) = (self.scale_to(18), other.scale_to(18)) {
+                return a.value.partial_cmp(&b.value);
+            }
+            return None;
+        }
+        self.value.partial_cmp(&other.value)
+    }
+}
+
+impl Ord for AssetAmount {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Equal)
     }
 }
 
@@ -760,5 +960,117 @@ mod tests {
         };
 
         assert!(!expired_permit.is_valid());
+    }
+
+    #[test]
+    fn test_asset_amount_creation() {
+        // $100.50 with 2 decimals
+        let amt = AssetAmount::new(10050, 2);
+        assert_eq!(amt.value, 10050);
+        assert_eq!(amt.decimals, 2);
+        assert_eq!(amt.to_string(), "100.50");
+    }
+
+    #[test]
+    fn test_asset_amount_from_human() {
+        let amt = AssetAmount::from_human(100.50, 2);
+        assert_eq!(amt.value, 10050);
+        assert_eq!(amt.to_human(), 100.50);
+    }
+
+    #[test]
+    fn test_asset_amount_arithmetic() {
+        let a = AssetAmount::new(10000, 2); // $100.00
+        let b = AssetAmount::new(5000, 2);  // $50.00
+
+        // Addition
+        let sum = a.checked_add(b).unwrap();
+        assert_eq!(sum.value, 15000);
+        assert_eq!(sum.to_string(), "150.00");
+
+        // Subtraction
+        let diff = a.checked_sub(b).unwrap();
+        assert_eq!(diff.value, 5000);
+        assert_eq!(diff.to_string(), "50.00");
+
+        // Multiplication
+        let doubled = a.checked_mul(2).unwrap();
+        assert_eq!(doubled.value, 20000);
+
+        // Division
+        let halved = a.checked_div(2).unwrap();
+        assert_eq!(halved.value, 5000);
+    }
+
+    #[test]
+    fn test_asset_amount_mismatched_decimals() {
+        let a = AssetAmount::new(10000, 2);
+        let b = AssetAmount::new(10000, 4);
+
+        // Addition should fail with mismatched decimals
+        assert!(a.checked_add(b).is_none());
+    }
+
+    #[test]
+    fn test_asset_amount_scaling() {
+        let amt = AssetAmount::new(10050, 2); // 100.50 with 2 decimals
+
+        // Scale up to 4 decimals
+        let scaled_up = amt.scale_to(4).unwrap();
+        assert_eq!(scaled_up.value, 1005000);
+        assert_eq!(scaled_up.decimals, 4);
+        assert_eq!(scaled_up.to_string(), "100.5000");
+
+        // Scale down to 1 decimal (loses precision)
+        let scaled_down = amt.scale_to(1).unwrap();
+        assert_eq!(scaled_down.value, 1005); // 100.5
+        assert_eq!(scaled_down.decimals, 1);
+    }
+
+    #[test]
+    fn test_asset_amount_iusd() {
+        let amt = AssetAmount::iusd(10050); // 100.50 IUSD
+        assert_eq!(amt.decimals, 2);
+        assert_eq!(amt.to_string(), "100.50");
+
+        let from_human = AssetAmount::iusd_from_human(100.50);
+        assert_eq!(from_human.value, 10050);
+    }
+
+    #[test]
+    fn test_asset_amount_to_legacy() {
+        let amt = AssetAmount::new(10050, 2);
+        let legacy = amt.to_amount().unwrap();
+        assert_eq!(legacy.0, 10050);
+    }
+
+    #[test]
+    fn test_amount_to_asset_amount() {
+        let legacy = Amount::new(10050);
+        let asset = legacy.to_asset_amount(2);
+        assert_eq!(asset.value, 10050);
+        assert_eq!(asset.decimals, 2);
+    }
+
+    #[test]
+    fn test_asset_amount_comparison() {
+        let a = AssetAmount::new(10000, 2);
+        let b = AssetAmount::new(5000, 2);
+        let c = AssetAmount::new(10000, 2);
+
+        assert!(a > b);
+        assert!(b < a);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn test_asset_amount_large_values() {
+        // Test with very large values (u128 range)
+        let large = AssetAmount::new(u128::MAX / 2, 18);
+        assert!(!large.is_zero());
+
+        // Should handle without overflow
+        let sum = large.checked_add(AssetAmount::new(1, 18));
+        assert!(sum.is_some());
     }
 }

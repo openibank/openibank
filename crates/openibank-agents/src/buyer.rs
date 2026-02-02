@@ -12,7 +12,7 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 use openibank_core::{
     Amount, AssetId, BudgetPolicy, CounterpartyConstraint, Escrow, EscrowId, EscrowIntent,
-    Invoice, InvoiceId, PaymentIntent, ReleaseCondition, ResonatorId, SpendPermit, SpendPurpose,
+    Invoice, InvoiceId, ReleaseCondition, ResonatorId, SpendPermit, SpendPurpose,
     Wallet,
 };
 use openibank_ledger::Ledger;
@@ -62,6 +62,7 @@ pub struct BuyerAgent {
     id: ResonatorId,
     wallet: Wallet,
     brain: AgentBrain,
+    #[allow(dead_code)] // Reserved for future ledger integration
     ledger: Arc<Ledger>,
     pending_invoices: Vec<Invoice>,
 }

@@ -3,7 +3,6 @@
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 use crate::types::*;
 
@@ -100,6 +99,7 @@ struct OllamaOptions {
 struct OllamaResponse {
     response: String,
     #[serde(default)]
+    #[allow(dead_code)]
     done: bool,
 }
 

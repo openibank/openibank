@@ -63,6 +63,7 @@ pub struct SellerAgent {
     id: ResonatorId,
     wallet: Wallet,
     brain: AgentBrain,
+    #[allow(dead_code)] // Reserved for future ledger integration
     ledger: Arc<Ledger>,
     services: Vec<Service>,
     issued_invoices: Vec<Invoice>,
