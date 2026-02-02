@@ -1,0 +1,22 @@
+[package]
+name = "openibank-receipts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Trust artifact toolkit for OpeniBank - receipt validation and inspection"
+
+[dependencies]
+openibank-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+[[bin]]
+name = "openibank-receipts"
+path = "src/main.rs"

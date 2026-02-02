@@ -1,0 +1,77 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openibank-core",
+    "crates/openibank-ledger",
+    "crates/openibank-issuer",
+    "crates/openibank-llm",
+    "crates/openibank-agents",
+    "crates/openibank-guard",
+    "crates/openibank-receipts",
+    "services/openibank-issuer-resonator",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/openibank/openibank"
+homepage = "https://www.openibank.com/"
+authors = ["OpeniBank Contributors"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Cryptography
+ed25519-dalek = { version = "2.1", features = ["rand_core", "serde"] }
+rand = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
+sled = "0.34"
+
+# Web framework
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "stream"] }
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Logging & tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Environment
+dotenvy = "0.15"
+
+# Workspace crates
+openibank-core = { path = "crates/openibank-core" }
+openibank-ledger = { path = "crates/openibank-ledger" }
+openibank-issuer = { path = "crates/openibank-issuer" }
+openibank-llm = { path = "crates/openibank-llm" }
+openibank-agents = { path = "crates/openibank-agents" }
+openibank-guard = { path = "crates/openibank-guard" }
+openibank-receipts = { path = "crates/openibank-receipts" }

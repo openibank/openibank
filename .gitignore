@@ -1,0 +1,138 @@
+############################
+# OS / Editor
+############################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+.idea/
+*.swp
+*.swo
+*.tmp
+
+############################
+# Environment / Secrets
+############################
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.crt
+
+############################
+# Node / Next.js
+############################
+node_modules/
+.pnpm-store/
+.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+.next/
+out/
+dist/
+build/
+
+.vercel/
+.netlify/
+
+############################
+# Tailwind / CSS tooling
+############################
+*.css.map
+
+############################
+# Rust / Cargo
+############################
+target/
+**/target/
+
+Cargo.lock
+!Cargo.lock.example
+
+############################
+# Rust Analyzer / Tooling
+############################
+.rust-analyzer/
+rust-project.json
+
+############################
+# Databases / Local State
+############################
+*.sqlite
+*.sqlite3
+*.db
+*.sled
+*.rocksdb
+data/
+storage/
+state/
+snapshots/
+
+############################
+# Logs
+############################
+*.log
+logs/
+
+############################
+# LLM / Model Artifacts
+############################
+models/
+.gguf
+*.gguf
+*.bin
+*.onnx
+*.safetensors
+
+############################
+# Local AI Runtimes
+############################
+.ollama/
+.llama/
+.vllm/
+.cache/
+.cache/*
+.cache/**
+
+############################
+# Temporary / Generated
+############################
+tmp/
+temp/
+coverage/
+*.coverage
+*.lcov
+
+############################
+# Security / Receipts (Local)
+############################
+receipts/*.json
+receipts/*.sig
+
+############################
+# Docker / Containers
+############################
+docker-data/
+docker-volumes/
+*.pid
+
+############################
+# Backup / Archive
+############################
+*.bak
+*.backup
+*.old
+*.tar
+*.tar.gz
+*.zip

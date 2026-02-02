@@ -1,0 +1,25 @@
+[package]
+name = "openibank-agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Reference agents for OpeniBank - Buyer, Seller, Arbiter"
+
+[dependencies]
+openibank-core = { workspace = true }
+openibank-ledger = { workspace = true }
+openibank-issuer = { workspace = true }
+openibank-llm = { workspace = true }
+openibank-guard = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
