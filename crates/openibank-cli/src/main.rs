@@ -127,6 +127,7 @@ enum WalletCommands {
     /// Show wallet balance and info
     Info {
         /// Wallet name or ID
+        #[arg(short, long)]
         name: String,
     },
 
@@ -386,7 +387,7 @@ fn print_banner() {
     println!("{}{}{}",
         "║  ".bright_cyan(),
         "OpeniBank".bright_white().bold(),
-        " - Programmable Wallets + Receipts for AI Agents    ║".bright_cyan()
+        " - Programmable Wallets + Receipts for AI Agents       ║".bright_cyan()
     );
     println!("{}", "║                                                                  ║".bright_cyan());
     println!("{}", "╚══════════════════════════════════════════════════════════════════╝".bright_cyan());

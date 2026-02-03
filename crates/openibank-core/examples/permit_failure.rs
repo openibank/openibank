@@ -15,7 +15,7 @@ fn main() {
     println!("╔══════════════════════════════════════════════════════════════╗");
     println!("║         OpeniBank Fail-Closed Demonstration                  ║");
     println!("║                                                              ║");
-    println!("║  Invariant: Authority is always bounded. Fail closed.       ║");
+    println!("║  Invariant: Authority is always bounded. Fail closed.        ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
 

@@ -53,10 +53,12 @@ cargo build --release
 export PATH="$PATH:$(pwd)/target/release"
 ```
 
-### Option 3: Cargo Install
+### Option 3: Cargo Install (Coming Soon)
 
 ```bash
-cargo install openibank-cli
+# Not yet published to crates.io
+# For now, use Option 2 (build from source)
+cargo install openibank-cli  # Coming soon!
 ```
 
 ## CLI Commands
