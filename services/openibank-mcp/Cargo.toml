@@ -1,0 +1,26 @@
+[package]
+name = "openibank-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MCP (Model Context Protocol) server for OpeniBank - integrates with Claude Desktop"
+
+[[bin]]
+name = "openibank-mcp"
+path = "src/main.rs"
+
+[dependencies]
+openibank-core = { workspace = true }
+openibank-ledger = { workspace = true }
+openibank-issuer = { workspace = true }
+openibank-agents = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,92 +1,148 @@
 #!/bin/bash
-# OpeniBank Quick Installer
-# Usage: curl -fsSL https://openibank.com/install.sh | bash
-#    or: curl -fsSL https://github.com/openibank/openibank/raw/main/scripts/install.sh | bash
+# OpeniBank Installer
+# Usage: curl -sSL https://openibank.com/install.sh | bash
+#
+# This script installs the OpeniBank CLI and optionally sets up Ollama for local LLM support.
 
 set -e
 
-REPO_URL="https://github.com/openibank/openibank"
-INSTALL_DIR="${OPENIBANK_INSTALL_DIR:-$HOME/.openibank}"
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
 
+# Banner
+echo -e "${MAGENTA}"
+cat << 'BANNER'
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║    🏦 OpeniBank - Banking for AI Agents                       ║
+║                                                               ║
+║    AI agents need banks too.                                  ║
+║    This is how they'll pay each other.                        ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+BANNER
+echo -e "${NC}"
+
+# Detect OS
+OS="unknown"
+case "$(uname -s)" in
+    Linux*)     OS="linux";;
+    Darwin*)    OS="macos";;
+    MINGW*|MSYS*|CYGWIN*) OS="windows";;
+esac
+
+# Detect architecture
+ARCH="unknown"
+case "$(uname -m)" in
+    x86_64|amd64)  ARCH="x86_64";;
+    aarch64|arm64) ARCH="aarch64";;
+esac
+
+echo -e "${CYAN}Detected: ${OS} / ${ARCH}${NC}"
 echo ""
-echo "╔══════════════════════════════════════════════════════════════════════╗"
-echo "║                                                                      ║"
-echo "║     ██████╗ ██████╗ ███████╗███╗   ██╗██╗██████╗  █████╗ ███╗   ██╗██╗  ██╗"
-echo "║    ██╔═══██╗██╔══██╗██╔════╝████╗  ██║██║██╔══██╗██╔══██╗████╗  ██║██║ ██╔╝"
-echo "║    ██║   ██║██████╔╝█████╗  ██╔██╗ ██║██║██████╔╝███████║██╔██╗ ██║█████╔╝ "
-echo "║    ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║██║██╔══██╗██╔══██║██║╚██╗██║██╔═██╗ "
-echo "║    ╚██████╔╝██║     ███████╗██║ ╚████║██║██████╔╝██║  ██║██║ ╚████║██║  ██╗"
-echo "║     ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝"
-echo "║                                                                      ║"
-echo "║          Programmable Wallets + Receipts for AI Agents               ║"
-echo "║                                                                      ║"
-echo "╚══════════════════════════════════════════════════════════════════════╝"
-echo ""
 
-# Check for required tools
-echo "Checking prerequisites..."
+# Installation directory
+INSTALL_DIR="${HOME}/.openibank"
+BIN_DIR="${INSTALL_DIR}/bin"
 
-if ! command -v git &> /dev/null; then
-    echo "  ✗ git not found. Please install git first."
+mkdir -p "$BIN_DIR"
+
+# Check if we should build from source (cargo available) or download binary
+if command -v cargo &> /dev/null; then
+    echo -e "${GREEN}✓ Rust/Cargo detected. Building from source...${NC}"
+    echo ""
+
+    # Clone or update repo
+    if [ -d "${INSTALL_DIR}/src" ]; then
+        echo -e "${BLUE}Updating existing installation...${NC}"
+        cd "${INSTALL_DIR}/src"
+        git pull origin main 2>/dev/null || true
+    else
+        echo -e "${BLUE}Cloning OpeniBank repository...${NC}"
+        git clone https://github.com/openibank/openibank.git "${INSTALL_DIR}/src" 2>/dev/null || {
+            echo -e "${YELLOW}Git clone failed. Checking for local source...${NC}"
+            if [ -f "Cargo.toml" ] && grep -q "openibank" Cargo.toml 2>/dev/null; then
+                INSTALL_DIR="$(pwd)"
+                echo -e "${GREEN}✓ Using local source directory${NC}"
+            else
+                echo -e "${RED}Could not find OpeniBank source.${NC}"
+                exit 1
+            fi
+        }
+    fi
+    
+    cd "${INSTALL_DIR}/src" 2>/dev/null || cd "${INSTALL_DIR}"
+
+    # Build
+    echo -e "${BLUE}Building OpeniBank CLI...${NC}"
+    cargo build --release -p openibank-cli
+
+    # Copy binaries
+    cp target/release/openibank "${BIN_DIR}/" 2>/dev/null || true
+
+    # Build additional services
+    echo -e "${BLUE}Building additional services...${NC}"
+    cargo build --release -p openibank-playground 2>/dev/null || true
+    cargo build --release -p openibank-mcp 2>/dev/null || true
+
+    # Copy service binaries
+    for bin in openibank-playground openibank-mcp openibank-issuer-resonator; do
+        cp "target/release/${bin}" "${BIN_DIR}/" 2>/dev/null || true
+    done
+
+else
+    echo -e "${YELLOW}⚠ Rust not found. Please install Rust first:${NC}"
+    echo "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
     exit 1
 fi
-echo "  ✓ git"
 
-if ! command -v cargo &> /dev/null; then
-    echo "  ✗ cargo not found. Please install Rust first."
-    echo "    Visit: https://rustup.rs/"
-    exit 1
+echo ""
+echo -e "${GREEN}✓ OpeniBank CLI installed to ${BIN_DIR}/openibank${NC}"
+
+# Add to PATH
+SHELL_NAME=$(basename "$SHELL")
+PROFILE_FILE=""
+
+case "$SHELL_NAME" in
+    bash)
+        if [ -f "${HOME}/.bash_profile" ]; then
+            PROFILE_FILE="${HOME}/.bash_profile"
+        else
+            PROFILE_FILE="${HOME}/.bashrc"
+        fi
+        ;;
+    zsh)
+        PROFILE_FILE="${HOME}/.zshrc"
+        ;;
+esac
+
+if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
+    if [ -n "$PROFILE_FILE" ]; then
+        echo "" >> "$PROFILE_FILE"
+        echo "# OpeniBank" >> "$PROFILE_FILE"
+        echo "export PATH=\"\$PATH:${BIN_DIR}\"" >> "$PROFILE_FILE"
+        echo -e "${GREEN}✓ Added to PATH in ${PROFILE_FILE}${NC}"
+    fi
 fi
-echo "  ✓ cargo ($(cargo --version | cut -d' ' -f2))"
-
-# Optional: Check for Ollama
-if command -v ollama &> /dev/null; then
-    echo "  ✓ ollama (for local LLM support)"
-else
-    echo "  ○ ollama not found (optional - for local LLM support)"
-    echo "    Install later: brew install ollama (macOS) or https://ollama.com"
-fi
 
 echo ""
-
-# Clone or update repository
-if [ -d "$INSTALL_DIR" ]; then
-    echo "Updating existing installation..."
-    cd "$INSTALL_DIR"
-    git pull
-else
-    echo "Cloning OpeniBank..."
-    git clone "$REPO_URL" "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
-fi
-
+echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  ✓ Installation Complete!${NC}"
+echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo "Building OpeniBank..."
-cargo build --release
-
+echo -e "${CYAN}Quick Start:${NC}"
 echo ""
-echo "Running tests..."
-cargo test --release -- --quiet || true
-
+echo "  # Run the viral demo"
+echo -e "  ${MAGENTA}openibank demo full${NC}"
 echo ""
-echo "╔══════════════════════════════════════════════════════════════════════╗"
-echo "║                     Installation Complete!                           ║"
-echo "╚══════════════════════════════════════════════════════════════════════╝"
+echo "  # Start the web playground"
+echo -e "  ${MAGENTA}openibank-playground${NC}  # Then open http://localhost:8080"
 echo ""
-echo "OpeniBank installed to: $INSTALL_DIR"
+echo -e "${YELLOW}AI agents need banks too. This is how they'll pay each other.${NC}"
 echo ""
-echo "Quick Start:"
-echo "  cd $INSTALL_DIR"
-echo "  cargo run --example asset_cycle"
-echo ""
-echo "With local LLM (requires Ollama):"
-echo "  ollama pull llama3.1:8b"
-echo "  ollama serve"
-echo "  OPENIBANK_LLM_PROVIDER=ollama cargo run --example asset_cycle"
-echo ""
-echo "Learn more:"
-echo "  Website: https://www.openibank.com/"
-echo "  GitHub:  https://github.com/openibank/openibank/"
-echo "  Docs:    $INSTALL_DIR/docs/"
-echo ""
-echo "Happy banking! 🏦"

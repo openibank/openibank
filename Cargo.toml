@@ -8,7 +8,10 @@ members = [
     "crates/openibank-agents",
     "crates/openibank-guard",
     "crates/openibank-receipts",
+    "crates/openibank-cli",
     "services/openibank-issuer-resonator",
+    "services/openibank-playground",
+    "services/openibank-mcp",
 ]
 
 [workspace.package]

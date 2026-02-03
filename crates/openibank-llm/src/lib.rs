@@ -18,11 +18,14 @@
 //! 2. All LLM outputs are validated before use
 //! 3. Deterministic fallback when no LLM is available
 //! 4. JSON-mode for structured outputs
+//! 5. Visible reasoning for transparent decision-making
 
 pub mod providers;
+pub mod reasoning;
 pub mod router;
 pub mod types;
 
 pub use providers::*;
+pub use reasoning::*;
 pub use router::*;
 pub use types::*;
