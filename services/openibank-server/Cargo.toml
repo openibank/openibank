@@ -1,13 +1,13 @@
 [package]
-name = "openibank-playground"
+name = "openibank-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "OpeniBank Playground - Central hub with Maple AI Framework integration"
+description = "OpeniBank Server - One-command AI agent banking server"
 
 [[bin]]
-name = "openibank-playground"
+name = "openibank-server"
 path = "src/main.rs"
 
 [dependencies]
@@ -19,7 +19,8 @@ openibank-llm = { workspace = true }
 openibank-agents = { workspace = true }
 openibank-maple = { workspace = true }
 openibank-state = { workspace = true }
-openibank-ual = { workspace = true }
+openibank-palm = { path = "../../crates/openibank-palm" }
+openibank-ual = { path = "../../crates/openibank-ual" }
 
 # Maple AI Framework
 maple-runtime = { workspace = true }
@@ -38,5 +39,7 @@ tower-http = { workspace = true, features = ["cors", "trace", "fs"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+palm-registry = { path = "../../../maple/crates/palm-registry" }
 tokio-stream = "0.1"
 async-stream = "0.3"

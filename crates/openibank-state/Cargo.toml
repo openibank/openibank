@@ -1,25 +1,21 @@
 [package]
-name = "openibank-playground"
+name = "openibank-state"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "OpeniBank Playground - Central hub with Maple AI Framework integration"
-
-[[bin]]
-name = "openibank-playground"
-path = "src/main.rs"
+description = "Unified shared state for OpeniBank - connects CLI, Playground, and Dashboard"
 
 [dependencies]
 # OpeniBank crates
 openibank-core = { workspace = true }
 openibank-ledger = { workspace = true }
 openibank-issuer = { workspace = true }
-openibank-llm = { workspace = true }
 openibank-agents = { workspace = true }
+openibank-llm = { workspace = true }
+openibank-guard = { workspace = true }
+openibank-receipts = { workspace = true }
 openibank-maple = { workspace = true }
-openibank-state = { workspace = true }
-openibank-ual = { workspace = true }
 
 # Maple AI Framework
 maple-runtime = { workspace = true }
@@ -32,11 +28,7 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
-axum = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true, features = ["cors", "trace", "fs"] }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-futures = { workspace = true }
-tokio-stream = "0.1"
-async-stream = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true }

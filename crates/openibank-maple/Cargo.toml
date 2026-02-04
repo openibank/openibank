@@ -1,0 +1,42 @@
+[package]
+name = "openibank-maple"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bridge crate: Maps OpeniBank agents/wallets to Maple AI Framework Resonators"
+
+[dependencies]
+# Maple AI Framework
+maple-runtime = { workspace = true }
+resonator-types = { workspace = true }
+rcf-types = { workspace = true }
+rcf-commitment = { workspace = true }
+aas-types = { workspace = true }
+aas-policy = { workspace = true }
+aas-service = { workspace = true }
+aas-identity = { workspace = true }
+aas-capability = { workspace = true }
+aas-adjudication = { workspace = true }
+aas-ledger = { workspace = true }
+
+# OpeniBank crates
+openibank-core = { workspace = true }
+openibank-ledger = { workspace = true }
+openibank-issuer = { workspace = true }
+openibank-agents = { workspace = true }
+openibank-llm = { workspace = true }
+openibank-guard = { workspace = true }
+
+# Shared deps
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

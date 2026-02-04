@@ -1,29 +1,25 @@
-//! OpeniBank Playground - Interactive Web Demo
+//! OpeniBank Playground - Central Hub with Maple AI Framework
 //!
-//! A live web playground that demonstrates AI agent trading with real-time updates.
+//! The Playground is the central hub for the entire OpeniBank ecosystem.
+//! It owns the SystemState (Maple runtime, Ledger, Issuer, Agents) and
+//! serves both the web dashboard and the HTTP API that the CLI connects to.
 //!
-//! ## Features
+//! ## Architecture
 //!
-//! - **Live Agent Trading**: Watch AI agents trade in real-time
-//! - **LLM Reasoning Display**: See agent decision-making with visible reasoning
-//! - **Interactive Controls**: Create agents, fund wallets, trigger trades
-//! - **Real-time Updates**: Server-Sent Events for live state updates
-//!
-//! ## Running
-//!
-//! ```bash
-//! # Start the playground
-//! cargo run -p openibank-playground
-//!
-//! # Open in browser
-//! open http://localhost:8080
+//! ```text
+//! Playground (port 8080) ←── owns SystemState
+//!     ├─ Web Dashboard (/)
+//!     ├─ REST API (/api/*)
+//!     └─ SSE Events (/api/events)
+//!         ↑
+//! CLI ────┘  (connects via HTTP)
 //! ```
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{
         sse::{Event, Sse},
@@ -32,107 +28,26 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use chrono::Utc;
 use futures::stream::Stream;
-use openibank_agents::{AgentBrain, BuyerAgent, SellerAgent, Service};
+use openibank_agents::{AgentBrain, Service};
 use openibank_core::{Amount, AssetId, ResonatorId};
-use openibank_issuer::{Issuer, IssuerConfig, MintIntent};
-use openibank_ledger::Ledger;
+use openibank_issuer::MintIntent;
 use openibank_llm::LLMRouter;
-use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, RwLock};
+use openibank_maple::{
+    MapleResonatorAgent,
+    bridge::ResonatorAgentRole,
+    attention::AttentionManager,
+    AgentId, IdentityRef,
+};
+use openibank_state::{
+    SystemState, SystemEvent,
+    TransactionRecord, TransactionStatus,
+};
+use serde::Deserialize;
+use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-/// Application state shared across handlers
-struct AppState {
-    ledger: Arc<Ledger>,
-    issuer: Issuer,
-    agents: RwLock<AgentRegistry>,
-    events: broadcast::Sender<PlaygroundEvent>,
-    llm_router: LLMRouter,
-}
-
-/// Registry of active agents
-#[derive(Default)]
-struct AgentRegistry {
-    buyers: Vec<BuyerAgentState>,
-    sellers: Vec<SellerAgentState>,
-    trade_count: u32,
-    total_volume: u64,
-}
-
-struct BuyerAgentState {
-    id: String,
-    agent: BuyerAgent,
-    name: String,
-}
-
-struct SellerAgentState {
-    id: String,
-    agent: SellerAgent,
-    name: String,
-    service: Service,
-}
-
-/// Events sent to the frontend via SSE
-#[derive(Clone, Serialize)]
-#[serde(tag = "type")]
-enum PlaygroundEvent {
-    #[serde(rename = "agent_created")]
-    AgentCreated {
-        agent_type: String,
-        id: String,
-        name: String,
-    },
-    #[serde(rename = "balance_updated")]
-    BalanceUpdated { agent_id: String, balance: u64 },
-    #[serde(rename = "trade_started")]
-    TradeStarted {
-        buyer_id: String,
-        seller_id: String,
-        service: String,
-        amount: u64,
-    },
-    #[serde(rename = "llm_reasoning")]
-    LLMReasoning {
-        agent_id: String,
-        reasoning: String,
-        decision: String,
-    },
-    #[serde(rename = "trade_completed")]
-    TradeCompleted {
-        buyer_id: String,
-        seller_id: String,
-        amount: u64,
-        receipt_id: String,
-    },
-    #[serde(rename = "trade_failed")]
-    TradeFailed {
-        buyer_id: String,
-        seller_id: String,
-        reason: String,
-    },
-    #[serde(rename = "state_sync")]
-    StateSync {
-        buyers: Vec<AgentSummary>,
-        sellers: Vec<AgentSummary>,
-        trade_count: u32,
-        total_volume: u64,
-    },
-    #[serde(rename = "error")]
-    Error { message: String },
-}
-
-#[derive(Clone, Serialize)]
-struct AgentSummary {
-    id: String,
-    name: String,
-    balance: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    service: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    price: Option<u64>,
-}
 
 #[tokio::main]
 async fn main() {
@@ -142,64 +57,89 @@ async fn main() {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    tracing::info!("🎮 Starting OpeniBank Playground...");
+    tracing::info!("Starting OpeniBank Playground with Maple AI Framework...");
 
-    // Create shared state
-    let ledger = Arc::new(Ledger::new());
-    let issuer = Issuer::new(
-        IssuerConfig::default(),
-        Amount::new(100_000_000_00), // $1M reserve
-        ledger.clone(),
-    );
+    // Bootstrap SystemState (includes Maple runtime with iBank config)
+    let state = match SystemState::new().await {
+        Ok(s) => {
+            tracing::info!("Maple iBank runtime bootstrapped successfully");
+            Arc::new(s)
+        }
+        Err(e) => {
+            tracing::error!("Failed to bootstrap system state: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    let (event_tx, _) = broadcast::channel(1000);
+    // Check LLM availability
     let llm_router = LLMRouter::from_env();
-
     let llm_available = llm_router.is_available().await;
     tracing::info!(
         "LLM Status: {}",
-        if llm_available {
-            "Available ✓"
-        } else {
-            "Not available (deterministic mode)"
-        }
+        if llm_available { "Available" } else { "Not available (deterministic mode)" }
     );
 
-    let state = Arc::new(AppState {
-        ledger,
-        issuer,
-        agents: RwLock::new(AgentRegistry::default()),
-        events: event_tx,
-        llm_router,
+    // Log system start
+    state.log_activity(
+        openibank_state::activity::ActivityEntry::system_started()
+    ).await;
+
+    state.emit_event(SystemEvent::MapleRuntimeEvent {
+        event_type: "started".to_string(),
+        description: "Maple iBank runtime started with 8 canonical invariants".to_string(),
+        timestamp: Utc::now(),
     });
 
-    // Build router
+    // Build router with all API endpoints
     let app = Router::new()
         // Web UI
         .route("/", get(index_page))
-        // API endpoints
+        // System status
         .route("/api/status", get(get_status))
+        // Agent management
         .route("/api/agents", get(list_agents))
+        .route("/api/agents/{id}", get(get_agent))
+        .route("/api/agents/{id}/activity", get(get_agent_activity))
         .route("/api/agents/buyer", post(create_buyer))
         .route("/api/agents/seller", post(create_seller))
+        // Trading
         .route("/api/trade", post(execute_trade))
         .route("/api/trade/auto", post(start_auto_trading))
-        .route("/api/reset", post(reset_playground))
+        .route("/api/simulate", post(simulate_marketplace))
+        // Issuer / Supply
+        .route("/api/issuer/supply", get(get_supply))
+        .route("/api/issuer/receipts", get(get_issuer_receipts))
+        // Ledger
+        .route("/api/ledger/accounts", get(get_ledger_accounts))
+        // Transactions & Receipts
+        .route("/api/transactions", get(get_transactions))
+        .route("/api/receipts", get(get_receipts))
+        // Resonators (Maple)
+        .route("/api/resonators", get(get_resonators))
+        // System log
+        .route("/api/system/log", get(get_system_log))
         // SSE stream
         .route("/api/events", get(event_stream))
+        // UAL command endpoint
+        .route("/api/ual", post(execute_ual))
+        // Info
+        .route("/api/info", get(get_info))
+        // Reset
+        .route("/api/reset", post(reset_playground))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     let addr = "0.0.0.0:8080";
-    tracing::info!("🌐 Playground running at http://localhost:8080");
-    tracing::info!("📡 API available at http://localhost:8080/api/status");
+    tracing::info!("Playground running at http://localhost:8080");
+    tracing::info!("API available at http://localhost:8080/api/status");
+    tracing::info!("Dashboard at http://localhost:8080");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
 // ============================================================================
-// Web UI Handler
+// Web UI
 // ============================================================================
 
 async fn index_page() -> Html<&'static str> {
@@ -207,75 +147,85 @@ async fn index_page() -> Html<&'static str> {
 }
 
 // ============================================================================
-// API Handlers
+// Status
 // ============================================================================
 
-#[derive(Serialize)]
-struct StatusResponse {
-    name: String,
-    version: String,
-    llm_available: bool,
-    llm_provider: String,
-    total_supply: u64,
-    agents: AgentCounts,
-}
+async fn get_status(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let summary = state.status_summary().await;
+    let llm_router = LLMRouter::from_env();
+    let llm_available = llm_router.is_available().await;
 
-#[derive(Serialize)]
-struct AgentCounts {
-    buyers: usize,
-    sellers: usize,
-}
-
-async fn get_status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
-    let agents = state.agents.read().await;
-    let llm_available = state.llm_router.is_available().await;
-
-    Json(StatusResponse {
-        name: "OpeniBank Playground".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        llm_available,
-        llm_provider: std::env::var("OPENIBANK_LLM_PROVIDER").unwrap_or_else(|_| "none".to_string()),
-        total_supply: state.issuer.total_supply().await.0,
-        agents: AgentCounts {
-            buyers: agents.buyers.len(),
-            sellers: agents.sellers.len(),
+    Json(serde_json::json!({
+        "name": "OpeniBank Playground",
+        "version": env!("CARGO_PKG_VERSION"),
+        "maple_runtime": summary.runtime,
+        "llm_available": llm_available,
+        "llm_provider": std::env::var("OPENIBANK_LLM_PROVIDER").unwrap_or_else(|_| "none".to_string()),
+        "agents": {
+            "total": summary.agent_count,
+            "buyers": summary.buyer_count,
+            "sellers": summary.seller_count,
+            "arbiters": summary.arbiter_count
         },
-    })
+        "trading": {
+            "trade_count": summary.trade_count,
+            "total_volume": summary.total_volume,
+            "total_volume_display": format!("${:.2}", summary.total_volume as f64 / 100.0)
+        },
+        "issuer": {
+            "total_supply": summary.total_supply,
+            "remaining_supply": summary.remaining_supply,
+            "total_supply_display": format!("${:.2}", summary.total_supply as f64 / 100.0)
+        },
+        "uptime_seconds": summary.uptime_seconds,
+        "started_at": summary.started_at
+    }))
 }
 
-async fn list_agents(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let agents = state.agents.read().await;
+// ============================================================================
+// Agent Management
+// ============================================================================
 
-    let buyers: Vec<AgentSummary> = agents
-        .buyers
-        .iter()
-        .map(|b| AgentSummary {
-            id: b.id.clone(),
-            name: b.name.clone(),
-            balance: b.agent.balance().0,
-            service: None,
-            price: None,
-        })
-        .collect();
+async fn list_agents(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let registry = state.agents.read().await;
 
-    let sellers: Vec<AgentSummary> = agents
-        .sellers
-        .iter()
-        .map(|s| AgentSummary {
-            id: s.id.clone(),
-            name: s.name.clone(),
-            balance: s.agent.balance().0,
-            service: Some(s.service.name.clone()),
-            price: Some(s.service.price.0),
-        })
+    let agents: Vec<serde_json::Value> = registry.agents.values()
+        .map(|a| serde_json::to_value(a.to_api_info()).unwrap_or_default())
         .collect();
 
     Json(serde_json::json!({
-        "buyers": buyers,
-        "sellers": sellers,
-        "trade_count": agents.trade_count,
-        "total_volume": agents.total_volume
+        "agents": agents,
+        "count": agents.len(),
+        "trade_count": registry.trade_count,
+        "total_volume": registry.total_volume
     }))
+}
+
+async fn get_agent(
+    State(state): State<Arc<SystemState>>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let registry = state.agents.read().await;
+    let agent = registry.agents.get(&id)
+        .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", id)))?;
+
+    Ok(Json(serde_json::to_value(agent.to_api_info()).unwrap_or_default()))
+}
+
+async fn get_agent_activity(
+    State(state): State<Arc<SystemState>>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let registry = state.agents.read().await;
+    let agent = registry.agents.get(&id)
+        .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", id)))?;
+
+    let entries = agent.activity_log().entries();
+    Ok(Json(serde_json::json!({
+        "agent_id": id,
+        "entries": entries,
+        "count": entries.len()
+    })))
 }
 
 #[derive(Deserialize)]
@@ -285,54 +235,128 @@ struct CreateBuyerRequest {
 }
 
 async fn create_buyer(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<SystemState>>,
     Json(req): Json<CreateBuyerRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let funding = req.funding.unwrap_or(500_00); // Default $500
-    let id = format!("buyer_{}", req.name.to_lowercase().replace(' ', "_"));
-    let resonator_id = ResonatorId::from_string(&id);
+    let agent_id = format!("res_{}", req.name.to_lowercase().replace(' ', "_"));
+
+    // Check if already exists
+    {
+        let registry = state.agents.read().await;
+        if registry.agents.contains_key(&agent_id) {
+            return Err(AppError::Internal(format!("Agent {} already exists", agent_id)));
+        }
+    }
 
     // Create brain with LLM if available
-    let brain = if state.llm_router.is_available().await {
+    let llm_router = LLMRouter::from_env();
+    let brain = if llm_router.is_available().await {
         AgentBrain::with_llm(LLMRouter::from_env())
     } else {
         AgentBrain::deterministic()
     };
 
-    let mut buyer = BuyerAgent::with_brain(resonator_id.clone(), state.ledger.clone(), brain);
+    // Register with Maple runtime
+    let resonator_handle = match state.runtime.register_agent(&req.name, ResonatorAgentRole::Buyer).await {
+        Ok(h) => Some(h),
+        Err(e) => {
+            tracing::warn!("Could not register Maple resonator for {}: {}", req.name, e);
+            None
+        }
+    };
 
-    // Fund the buyer
+    // Create the MapleResonatorAgent
+    let mut agent = MapleResonatorAgent::new_buyer(
+        &req.name,
+        state.ledger.clone(),
+        brain,
+        resonator_handle,
+    );
+
+    // Fund the buyer via issuer
+    let resonator_id = ResonatorId::from_string(&agent_id);
     let mint = MintIntent::new(resonator_id, Amount::new(funding), "Playground funding");
-    state
-        .issuer
-        .mint(mint)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    {
+        let issuer = state.issuer.read().await;
+        issuer.mint(mint).await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+    }
 
-    buyer
+    // Setup buyer wallet
+    agent.as_buyer_mut().unwrap()
         .setup(Amount::new(funding), Amount::new(funding / 2))
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let mut agents = state.agents.write().await;
-    agents.buyers.push(BuyerAgentState {
-        id: id.clone(),
-        agent: buyer,
+    agent.log_balance_change(format!("Funded ${:.2}", funding as f64 / 100.0));
+
+    // Register identity with AAS and grant capabilities
+    let aas_info = {
+        let role = ResonatorAgentRole::Buyer;
+        let registered = state.accountability
+            .register_agent_identity(&req.name, &role);
+        match registered {
+            Ok(registered_agent) => {
+                let agent_aas_id = registered_agent.agent_id.clone();
+                // Grant role-based capabilities
+                match state.accountability.grant_role_capabilities(&agent_aas_id, &role) {
+                    Ok(grants) => {
+                        for grant in &grants {
+                            state.emit_event(SystemEvent::CapabilityGranted {
+                                agent_id: agent_id.clone(),
+                                agent_name: req.name.clone(),
+                                capability: format!("{:?}", grant.capability.scope.operations),
+                                domain: "Finance".to_string(),
+                                timestamp: Utc::now(),
+                            });
+                        }
+                        Some((agent_aas_id, grants.len()))
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to grant capabilities for {}: {}", req.name, e);
+                        Some((agent_aas_id, 0))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to register AAS identity for {}: {}", req.name, e);
+                None
+            }
+        }
+    };
+
+    let info = agent.to_api_info();
+
+    // Register in state
+    {
+        let mut registry = state.agents.write().await;
+        registry.agents.insert(agent_id.clone(), agent);
+    }
+
+    // Emit events
+    state.emit_event(SystemEvent::AgentCreated {
+        agent_id: agent_id.clone(),
         name: req.name.clone(),
+        role: "Buyer".to_string(),
+        has_resonator: info.has_resonator,
+        timestamp: Utc::now(),
     });
 
-    // Broadcast event
-    let _ = state.events.send(PlaygroundEvent::AgentCreated {
-        agent_type: "buyer".to_string(),
-        id: id.clone(),
-        name: req.name.clone(),
-    });
+    if let Some((_, cap_count)) = &aas_info {
+        state.emit_event(SystemEvent::MapleRuntimeEvent {
+            event_type: "aas_registered".to_string(),
+            description: format!("{} registered with AAS ({} capabilities granted)", req.name, cap_count),
+            timestamp: Utc::now(),
+        });
+    }
+
+    state.log_activity(
+        openibank_state::activity::ActivityEntry::agent_created(&req.name, "Buyer")
+    ).await;
 
     Ok(Json(serde_json::json!({
         "success": true,
-        "id": id,
-        "name": req.name,
-        "balance": funding,
-        "budget": funding / 2
+        "agent": info
     })))
 }
 
@@ -344,14 +368,38 @@ struct CreateSellerRequest {
 }
 
 async fn create_seller(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<SystemState>>,
     Json(req): Json<CreateSellerRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let id = format!("seller_{}", req.name.to_lowercase().replace(' ', "_"));
-    let resonator_id = ResonatorId::from_string(&id);
+    let agent_id = format!("res_{}", req.name.to_lowercase().replace(' ', "_"));
 
-    let mut seller = SellerAgent::new(resonator_id, state.ledger.clone());
+    // Check if already exists
+    {
+        let registry = state.agents.read().await;
+        if registry.agents.contains_key(&agent_id) {
+            return Err(AppError::Internal(format!("Agent {} already exists", agent_id)));
+        }
+    }
 
+    let brain = AgentBrain::deterministic();
+
+    // Register with Maple runtime
+    let resonator_handle = match state.runtime.register_agent(&req.name, ResonatorAgentRole::Seller).await {
+        Ok(h) => Some(h),
+        Err(e) => {
+            tracing::warn!("Could not register Maple resonator for {}: {}", req.name, e);
+            None
+        }
+    };
+
+    let mut agent = MapleResonatorAgent::new_seller(
+        &req.name,
+        state.ledger.clone(),
+        brain,
+        resonator_handle,
+    );
+
+    // Publish service
     let service = Service {
         name: req.service_name.clone(),
         description: format!("AI service: {}", req.service_name),
@@ -360,31 +408,63 @@ async fn create_seller(
         delivery_conditions: vec!["Service completion".to_string()],
     };
 
-    seller.publish_service(service.clone());
+    agent.as_seller_mut().unwrap().publish_service(service);
 
-    let mut agents = state.agents.write().await;
-    agents.sellers.push(SellerAgentState {
-        id: id.clone(),
-        agent: seller,
+    // Register identity with AAS and grant capabilities
+    {
+        let role = ResonatorAgentRole::Seller;
+        match state.accountability.register_agent_identity(&req.name, &role) {
+            Ok(registered_agent) => {
+                let agent_aas_id = registered_agent.agent_id.clone();
+                match state.accountability.grant_role_capabilities(&agent_aas_id, &role) {
+                    Ok(grants) => {
+                        for grant in &grants {
+                            state.emit_event(SystemEvent::CapabilityGranted {
+                                agent_id: agent_id.clone(),
+                                agent_name: req.name.clone(),
+                                capability: format!("{:?}", grant.capability.scope.operations),
+                                domain: "Finance".to_string(),
+                                timestamp: Utc::now(),
+                            });
+                        }
+                    }
+                    Err(e) => tracing::warn!("Failed to grant capabilities for {}: {}", req.name, e),
+                }
+            }
+            Err(e) => tracing::warn!("Failed to register AAS identity for {}: {}", req.name, e),
+        }
+    }
+
+    let info = agent.to_api_info();
+
+    // Register in state
+    {
+        let mut registry = state.agents.write().await;
+        registry.agents.insert(agent_id.clone(), agent);
+    }
+
+    // Emit events
+    state.emit_event(SystemEvent::AgentCreated {
+        agent_id: agent_id.clone(),
         name: req.name.clone(),
-        service: service.clone(),
+        role: "Seller".to_string(),
+        has_resonator: info.has_resonator,
+        timestamp: Utc::now(),
     });
 
-    // Broadcast event
-    let _ = state.events.send(PlaygroundEvent::AgentCreated {
-        agent_type: "seller".to_string(),
-        id: id.clone(),
-        name: req.name.clone(),
-    });
+    state.log_activity(
+        openibank_state::activity::ActivityEntry::agent_created(&req.name, "Seller")
+    ).await;
 
     Ok(Json(serde_json::json!({
         "success": true,
-        "id": id,
-        "name": req.name,
-        "service": req.service_name,
-        "price": req.price
+        "agent": info
     })))
 }
+
+// ============================================================================
+// Trading
+// ============================================================================
 
 #[derive(Deserialize)]
 struct TradeRequest {
@@ -393,156 +473,411 @@ struct TradeRequest {
 }
 
 async fn execute_trade(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<SystemState>>,
     Json(req): Json<TradeRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let mut agents = state.agents.write().await;
+    execute_trade_internal(&state, &req.buyer_id, &req.seller_id).await
+}
 
-    // Find buyer and seller indices
-    let buyer_idx = agents
-        .buyers
-        .iter()
-        .position(|b| b.id == req.buyer_id)
-        .ok_or_else(|| AppError::NotFound(format!("Buyer {} not found", req.buyer_id)))?;
+async fn execute_trade_internal(
+    state: &Arc<SystemState>,
+    buyer_id: &str,
+    seller_id: &str,
+) -> Result<Json<serde_json::Value>, AppError> {
+    // ================================================================
+    // Phase 1: Validate agents and get service info
+    // ================================================================
+    let (service_name, service_price, buyer_name, seller_name, buyer_has_handle) = {
+        let registry = state.agents.read().await;
 
-    let seller_idx = agents
-        .sellers
-        .iter()
-        .position(|s| s.id == req.seller_id)
-        .ok_or_else(|| AppError::NotFound(format!("Seller {} not found", req.seller_id)))?;
+        if !registry.agents.contains_key(buyer_id) {
+            return Err(AppError::NotFound(format!("Buyer {} not found", buyer_id)));
+        }
+        if !registry.agents.contains_key(seller_id) {
+            return Err(AppError::NotFound(format!("Seller {} not found", seller_id)));
+        }
 
-    // Get service info
-    let service_name = agents.sellers[seller_idx].service.name.clone();
-    let service_price = agents.sellers[seller_idx].service.price.0;
+        let seller = registry.agents.get(seller_id).unwrap();
+        let services = seller.services();
+        if services.is_empty() {
+            return Err(AppError::Internal("Seller has no services".to_string()));
+        }
 
-    // Broadcast trade started
-    let _ = state.events.send(PlaygroundEvent::TradeStarted {
-        buyer_id: req.buyer_id.clone(),
-        seller_id: req.seller_id.clone(),
-        service: service_name.clone(),
+        let buyer = registry.agents.get(buyer_id).unwrap();
+        (
+            services[0].name.clone(),
+            services[0].price.0,
+            buyer.name.clone(),
+            seller.name.clone(),
+            buyer.resonator_handle.is_some(),
+        )
+    };
+
+    let trade_id = format!("trade_{}", uuid::Uuid::new_v4());
+
+    // ================================================================
+    // Phase 2: Maple Attention Budget Check
+    // ================================================================
+    {
+        let registry = state.agents.read().await;
+        let buyer = registry.agents.get(buyer_id).unwrap();
+        if let Some(ref handle) = buyer.resonator_handle {
+            let can_trade = AttentionManager::can_trade(handle).await;
+            if !can_trade {
+                state.emit_event(SystemEvent::AttentionExhausted {
+                    agent_id: buyer_id.to_string(),
+                    agent_name: buyer_name.clone(),
+                    timestamp: Utc::now(),
+                });
+                state.emit_event(SystemEvent::TradeFailed {
+                    trade_id: trade_id.clone(),
+                    buyer_id: buyer_id.to_string(),
+                    seller_id: seller_id.to_string(),
+                    reason: "Buyer attention budget exhausted".to_string(),
+                    timestamp: Utc::now(),
+                });
+                return Err(AppError::Internal("Buyer attention budget exhausted".to_string()));
+            }
+
+            // Get attention status for event
+            if let Some(status) = AttentionManager::get_status(handle, &buyer_name).await {
+                state.emit_event(SystemEvent::AttentionAllocated {
+                    agent_id: buyer_id.to_string(),
+                    agent_name: buyer_name.clone(),
+                    amount: 50,
+                    remaining: status.available,
+                    timestamp: Utc::now(),
+                });
+            }
+        }
+    }
+
+    // ================================================================
+    // Phase 3: Maple Coupling — Establish buyer↔seller connection
+    // ================================================================
+    let coupling_id = {
+        let registry = state.agents.read().await;
+        let buyer = registry.agents.get(buyer_id).unwrap();
+        if let Some(ref buyer_handle) = buyer.resonator_handle {
+            let seller_agent = registry.agents.get(seller_id).unwrap();
+            if let Some(ref seller_handle) = seller_agent.resonator_handle {
+                match state.coupling_manager
+                    .establish_trade_coupling(buyer_handle, seller_handle.id, Some(trade_id.clone()))
+                    .await
+                {
+                    Ok(coupling_handle) => {
+                        let cid = coupling_handle.id.to_string();
+                        state.emit_event(SystemEvent::CouplingEstablished {
+                            coupling_id: cid.clone(),
+                            buyer_id: buyer_id.to_string(),
+                            seller_id: seller_id.to_string(),
+                            strength: 0.2,
+                            timestamp: Utc::now(),
+                        });
+                        Some(cid)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Could not establish trade coupling: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // ================================================================
+    // Phase 4: Maple Commitment — Create and submit RcfCommitment
+    // ================================================================
+    let commitment_id = {
+        let buyer_identity = IdentityRef::new(&buyer_name);
+        match state.commitment_manager.create_trade_commitment(
+            &buyer_identity,
+            &buyer_name,
+            &seller_name,
+            service_price,
+            &service_name,
+        ) {
+            Ok(commitment) => {
+                let cid = commitment.commitment_id.0.clone();
+
+                state.emit_event(SystemEvent::CommitmentSubmitted {
+                    commitment_id: cid.clone(),
+                    buyer_name: buyer_name.clone(),
+                    seller_name: seller_name.clone(),
+                    amount: service_price,
+                    service_name: service_name.clone(),
+                    timestamp: Utc::now(),
+                });
+
+                // Submit to AAS pipeline
+                match state.commitment_manager.submit_and_track(
+                    &state.accountability,
+                    commitment,
+                ) {
+                    Ok(decision) => {
+                        if decision.decision.allows_execution() {
+                            state.emit_event(SystemEvent::CommitmentApproved {
+                                commitment_id: cid.clone(),
+                                decision: format!("{:?}", decision.decision),
+                                timestamp: Utc::now(),
+                            });
+                        } else {
+                            // Even if AAS requires human review, we proceed
+                            // (in production, this would wait for approval)
+                            state.emit_event(SystemEvent::MapleRuntimeEvent {
+                                event_type: "commitment_pending_review".to_string(),
+                                description: format!(
+                                    "Commitment {} pending review (Finance domain default policy). Auto-proceeding in playground.",
+                                    &cid[..8.min(cid.len())]
+                                ),
+                                timestamp: Utc::now(),
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("AAS submission warning (proceeding): {}", e);
+                    }
+                }
+
+                // Record execution started
+                let _ = state.commitment_manager.record_execution_started(
+                    &state.accountability,
+                    &cid,
+                );
+
+                Some(cid)
+            }
+            Err(e) => {
+                tracing::warn!("Could not create trade commitment: {}", e);
+                None
+            }
+        }
+    };
+
+    // ================================================================
+    // Phase 5: Execute trade (existing flow: invoice → escrow → deliver → release)
+    // ================================================================
+    state.emit_event(SystemEvent::TradeStarted {
+        trade_id: trade_id.clone(),
+        buyer_id: buyer_id.to_string(),
+        seller_id: seller_id.to_string(),
+        service_name: service_name.clone(),
         amount: service_price,
+        timestamp: Utc::now(),
     });
 
-    // Get offer
+    let mut registry = state.agents.write().await;
+
+    // Get offer from seller
     let offer = {
-        let seller = &agents.sellers[seller_idx];
-        seller.agent.get_offer(&service_name)
+        let seller = registry.agents.get(seller_id).unwrap();
+        seller.as_seller().unwrap().get_offer(&service_name)
     };
 
     let offer = match offer {
         Some(o) => o,
         None => {
-            let _ = state.events.send(PlaygroundEvent::TradeFailed {
-                buyer_id: req.buyer_id.clone(),
-                seller_id: req.seller_id.clone(),
+            // Record failure in Maple
+            if let Some(ref cid) = commitment_id {
+                let _ = state.commitment_manager.record_outcome(
+                    &state.accountability, cid, false, "No offer available",
+                );
+            }
+            state.emit_event(SystemEvent::TradeFailed {
+                trade_id: trade_id.clone(),
+                buyer_id: buyer_id.to_string(),
+                seller_id: seller_id.to_string(),
                 reason: "No offer available".to_string(),
+                timestamp: Utc::now(),
             });
             return Err(AppError::Internal("No offer available".to_string()));
         }
     };
 
     // Buyer evaluates offer
-    let can_afford = agents.buyers[buyer_idx].agent.evaluate_offer(&offer).await;
-
-    // Send reasoning event if LLM is used
-    if state.llm_router.is_available().await {
-        let _ = state.events.send(PlaygroundEvent::LLMReasoning {
-            agent_id: req.buyer_id.clone(),
-            reasoning: format!(
-                "Evaluating {} service at ${:.2}. Checking budget and value proposition.",
-                service_name,
-                service_price as f64 / 100.0
-            ),
-            decision: if can_afford {
-                "Accept offer".to_string()
-            } else {
-                "Decline offer".to_string()
-            },
-        });
-    }
+    let can_afford = {
+        let buyer = registry.agents.get(buyer_id).unwrap();
+        buyer.as_buyer().unwrap().evaluate_offer(&offer).await
+    };
 
     if !can_afford {
-        let _ = state.events.send(PlaygroundEvent::TradeFailed {
-            buyer_id: req.buyer_id.clone(),
-            seller_id: req.seller_id.clone(),
-            reason: "Buyer cannot afford or declined".to_string(),
+        if let Some(ref cid) = commitment_id {
+            let _ = state.commitment_manager.record_outcome(
+                &state.accountability, cid, false, "Buyer cannot afford",
+            );
+        }
+        state.emit_event(SystemEvent::TradeFailed {
+            trade_id: trade_id.clone(),
+            buyer_id: buyer_id.to_string(),
+            seller_id: seller_id.to_string(),
+            reason: "Cannot afford or declined".to_string(),
+            timestamp: Utc::now(),
         });
         return Err(AppError::Internal("Buyer cannot afford".to_string()));
     }
 
-    // Get buyer ID for invoice
-    let buyer_resonator_id = agents.buyers[buyer_idx].agent.id().clone();
+    // Get buyer resonator ID for invoice
+    let buyer_resonator_id = registry.agents.get(buyer_id).unwrap().id().clone();
 
-    // Issue invoice
-    let invoice = agents.sellers[seller_idx]
-        .agent
-        .issue_invoice(buyer_resonator_id, &service_name)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    // Issue invoice from seller
+    let invoice = {
+        let seller = registry.agents.get_mut(seller_id).unwrap();
+        seller.as_seller_mut().unwrap()
+            .issue_invoice(buyer_resonator_id, &service_name)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+    };
 
     let invoice_id = invoice.invoice_id.clone();
 
-    // Buyer accepts invoice
-    agents.buyers[buyer_idx]
-        .agent
-        .accept_invoice(invoice)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    // Buyer accepts and pays
+    {
+        let buyer = registry.agents.get_mut(buyer_id).unwrap();
+        let buyer_agent = buyer.as_buyer_mut().unwrap();
+        buyer_agent.accept_invoice(invoice)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+    }
 
-    // Pay invoice (creates escrow)
-    let (_, escrow) = agents.buyers[buyer_idx]
-        .agent
-        .pay_invoice(&invoice_id)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let (_, escrow) = {
+        let buyer = registry.agents.get_mut(buyer_id).unwrap();
+        buyer.as_buyer_mut().unwrap()
+            .pay_invoice(&invoice_id)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+    };
 
     let escrow_id = escrow.escrow_id.clone();
 
     // Seller delivers
-    agents.sellers[seller_idx]
-        .agent
-        .deliver_service(&invoice_id, "Service delivered successfully".to_string())
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    {
+        let seller = registry.agents.get_mut(seller_id).unwrap();
+        seller.as_seller_mut().unwrap()
+            .deliver_service(&invoice_id, "Service delivered successfully".to_string())
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+    }
 
     // Buyer confirms delivery
-    let amount = agents.buyers[buyer_idx]
-        .agent
-        .confirm_delivery(&escrow_id)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let amount = {
+        let buyer = registry.agents.get_mut(buyer_id).unwrap();
+        buyer.as_buyer_mut().unwrap()
+            .confirm_delivery(&escrow_id)
+            .map_err(|e| AppError::Internal(e.to_string()))?
+    };
 
     // Seller receives payment
-    agents.sellers[seller_idx]
-        .agent
-        .receive_payment(amount)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    {
+        let seller = registry.agents.get_mut(seller_id).unwrap();
+        seller.as_seller_mut().unwrap()
+            .receive_payment(amount)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+    }
 
-    // Update stats
-    agents.trade_count += 1;
-    agents.total_volume += amount.0;
+    // ================================================================
+    // Phase 6: Record outcome in Maple and update couplings
+    // ================================================================
 
-    // Broadcast completion
-    let _ = state.events.send(PlaygroundEvent::TradeCompleted {
-        buyer_id: req.buyer_id.clone(),
-        seller_id: req.seller_id.clone(),
+    // Record successful outcome in AAS
+    if let Some(ref cid) = commitment_id {
+        let _ = state.commitment_manager.record_outcome(
+            &state.accountability,
+            cid,
+            true,
+            &format!("Trade completed: {} bought '{}' from {} for ${:.2}",
+                buyer_name, service_name, seller_name, amount.0 as f64 / 100.0),
+        );
+        state.emit_event(SystemEvent::CommitmentOutcomeRecorded {
+            commitment_id: cid.clone(),
+            success: true,
+            details: format!("Trade completed for ${:.2}", amount.0 as f64 / 100.0),
+            timestamp: Utc::now(),
+        });
+    }
+
+    // Strengthen coupling on success, then decouple
+    if let Some(ref cid) = coupling_id {
+        state.emit_event(SystemEvent::CouplingStrengthened {
+            coupling_id: cid.clone(),
+            old_strength: 0.2,
+            new_strength: 0.3,
+            timestamp: Utc::now(),
+        });
+        state.emit_event(SystemEvent::Decoupled {
+            coupling_id: cid.clone(),
+            reason: "Trade completed successfully".to_string(),
+            timestamp: Utc::now(),
+        });
+    }
+
+    // ================================================================
+    // Phase 7: Log trades and update registry
+    // ================================================================
+
+    // Log trades on agents
+    {
+        let buyer = registry.agents.get_mut(buyer_id).unwrap();
+        buyer.log_trade(
+            format!("Bought '{}' for ${:.2}", service_name, amount.0 as f64 / 100.0),
+            None,
+        );
+        buyer.log_balance_change(format!("Balance: ${:.2}", buyer.balance().unwrap_or(Amount::zero()).0 as f64 / 100.0));
+    }
+    {
+        let seller = registry.agents.get_mut(seller_id).unwrap();
+        seller.log_trade(
+            format!("Sold '{}' for ${:.2}", service_name, amount.0 as f64 / 100.0),
+            None,
+        );
+        seller.log_balance_change(format!("Balance: ${:.2}", seller.balance().unwrap_or(Amount::zero()).0 as f64 / 100.0));
+    }
+
+    // Update registry stats
+    registry.trade_count += 1;
+    registry.total_volume += amount.0;
+
+    // Record transaction
+    registry.transactions.push(TransactionRecord {
+        tx_id: trade_id.clone(),
+        buyer_id: buyer_id.to_string(),
+        seller_id: seller_id.to_string(),
+        service_name: service_name.clone(),
         amount: amount.0,
-        receipt_id: escrow_id.0,
+        status: TransactionStatus::Completed,
+        receipt_id: Some(escrow_id.0.clone()),
+        timestamp: Utc::now(),
     });
 
-    // Send balance updates
-    let _ = state.events.send(PlaygroundEvent::BalanceUpdated {
-        agent_id: req.buyer_id.clone(),
-        balance: agents.buyers[buyer_idx].agent.balance().0,
+    let buyer_balance = registry.agents.get(buyer_id).unwrap().balance().unwrap_or(Amount::zero()).0;
+    let seller_balance = registry.agents.get(seller_id).unwrap().balance().unwrap_or(Amount::zero()).0;
+
+    // Emit events
+    state.emit_event(SystemEvent::TradeCompleted {
+        trade_id: trade_id.clone(),
+        buyer_id: buyer_id.to_string(),
+        seller_id: seller_id.to_string(),
+        service_name: service_name.clone(),
+        amount: amount.0,
+        receipt_id: Some(escrow_id.0),
+        timestamp: Utc::now(),
     });
 
-    let _ = state.events.send(PlaygroundEvent::BalanceUpdated {
-        agent_id: req.seller_id.clone(),
-        balance: agents.sellers[seller_idx].agent.balance().0,
-    });
+    state.log_activity(
+        openibank_state::activity::ActivityEntry::trade_completed(buyer_id, seller_id, &service_name, amount.0)
+    ).await;
 
     Ok(Json(serde_json::json!({
         "success": true,
+        "trade_id": trade_id,
         "amount": amount.0,
-        "buyer_balance": agents.buyers[buyer_idx].agent.balance().0,
-        "seller_balance": agents.sellers[seller_idx].agent.balance().0
+        "buyer_balance": buyer_balance,
+        "seller_balance": seller_balance,
+        "maple": {
+            "commitment_id": commitment_id,
+            "coupling_id": coupling_id,
+        }
     })))
 }
 
@@ -553,31 +888,36 @@ struct AutoTradeRequest {
 }
 
 async fn start_auto_trading(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<SystemState>>,
     Json(req): Json<AutoTradeRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let rounds = req.rounds.unwrap_or(10);
     let delay_ms = req.delay_ms.unwrap_or(1000);
 
-    // Spawn background task
     let state_clone = state.clone();
     tokio::spawn(async move {
         for round in 0..rounds {
-            let agents = state_clone.agents.read().await;
-            if agents.buyers.is_empty() || agents.sellers.is_empty() {
-                break;
-            }
+            let (buyer_id, seller_id) = {
+                let registry = state_clone.agents.read().await;
+                let buyers: Vec<String> = registry.agents.iter()
+                    .filter(|(_, a)| a.role() == ResonatorAgentRole::Buyer)
+                    .map(|(k, _)| k.clone())
+                    .collect();
+                let sellers: Vec<String> = registry.agents.iter()
+                    .filter(|(_, a)| a.role() == ResonatorAgentRole::Seller)
+                    .map(|(k, _)| k.clone())
+                    .collect();
 
-            let buyer_idx = (round as usize) % agents.buyers.len();
-            let seller_idx = (round as usize) % agents.sellers.len();
+                if buyers.is_empty() || sellers.is_empty() {
+                    break;
+                }
 
-            let buyer_id = agents.buyers[buyer_idx].id.clone();
-            let seller_id = agents.sellers[seller_idx].id.clone();
-            drop(agents);
+                let b = buyers[round as usize % buyers.len()].clone();
+                let s = sellers[round as usize % sellers.len()].clone();
+                (b, s)
+            };
 
-            // Execute trade (ignore errors in auto mode)
             let _ = execute_trade_internal(&state_clone, &buyer_id, &seller_id).await;
-
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
         }
     });
@@ -588,104 +928,303 @@ async fn start_auto_trading(
     })))
 }
 
-async fn execute_trade_internal(state: &Arc<AppState>, buyer_id: &str, seller_id: &str) -> Result<(), String> {
-    let mut agents = state.agents.write().await;
+#[derive(Deserialize)]
+struct SimulateRequest {
+    buyers: Option<u32>,
+    sellers: Option<u32>,
+    rounds: Option<u32>,
+    delay_ms: Option<u64>,
+}
 
-    let buyer_idx = agents
-        .buyers
-        .iter()
-        .position(|b| b.id == buyer_id)
-        .ok_or("Buyer not found")?;
+async fn simulate_marketplace(
+    State(state): State<Arc<SystemState>>,
+    Json(req): Json<SimulateRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let num_buyers = req.buyers.unwrap_or(3);
+    let num_sellers = req.sellers.unwrap_or(2);
+    let rounds = req.rounds.unwrap_or(10);
+    let delay_ms = req.delay_ms.unwrap_or(500);
 
-    let seller_idx = agents
-        .sellers
-        .iter()
-        .position(|s| s.id == seller_id)
-        .ok_or("Seller not found")?;
+    let service_catalog = vec![
+        ("Data Analysis", 100_00),
+        ("Model Training", 200_00),
+        ("API Integration", 150_00),
+        ("Security Audit", 300_00),
+        ("Cloud Setup", 250_00),
+    ];
 
-    let service_name = agents.sellers[seller_idx].service.name.clone();
-    let service_price = agents.sellers[seller_idx].service.price.0;
+    let buyer_names = vec!["Alice", "Bob", "Carol", "Dave", "Eve"];
+    let seller_names = vec!["DataCorp", "CloudAI", "SecureNet", "ModelHub", "APIForge"];
 
-    let _ = state.events.send(PlaygroundEvent::TradeStarted {
-        buyer_id: buyer_id.to_string(),
-        seller_id: seller_id.to_string(),
-        service: service_name.clone(),
-        amount: service_price,
-    });
-
-    let offer = agents.sellers[seller_idx]
-        .agent
-        .get_offer(&service_name)
-        .ok_or("No offer")?;
-
-    let can_afford = agents.buyers[buyer_idx].agent.evaluate_offer(&offer).await;
-
-    if !can_afford {
-        let _ = state.events.send(PlaygroundEvent::TradeFailed {
-            buyer_id: buyer_id.to_string(),
-            seller_id: seller_id.to_string(),
-            reason: "Cannot afford".to_string(),
-        });
-        return Err("Cannot afford".to_string());
+    // Create sellers
+    for i in 0..num_sellers as usize {
+        let name = seller_names[i % seller_names.len()];
+        let (svc, price) = &service_catalog[i % service_catalog.len()];
+        let req = CreateSellerRequest {
+            name: name.to_string(),
+            service_name: svc.to_string(),
+            price: *price as u64,
+        };
+        let _ = create_seller_internal(&state, req).await;
     }
 
-    let buyer_resonator_id = agents.buyers[buyer_idx].agent.id().clone();
+    // Create buyers
+    for i in 0..num_buyers as usize {
+        let name = buyer_names[i % buyer_names.len()];
+        let req = CreateBuyerRequest {
+            name: name.to_string(),
+            funding: Some(10000_00), // $10,000
+        };
+        let _ = create_buyer_internal(&state, req).await;
+    }
 
-    let invoice = agents.sellers[seller_idx]
-        .agent
-        .issue_invoice(buyer_resonator_id, &service_name)
-        .await
-        .map_err(|e| e.to_string())?;
+    // Start auto trading in background
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        for round in 0..rounds {
+            let (buyer_id, seller_id) = {
+                let registry = state_clone.agents.read().await;
+                let buyers: Vec<String> = registry.agents.iter()
+                    .filter(|(_, a)| a.role() == ResonatorAgentRole::Buyer)
+                    .map(|(k, _)| k.clone())
+                    .collect();
+                let sellers: Vec<String> = registry.agents.iter()
+                    .filter(|(_, a)| a.role() == ResonatorAgentRole::Seller)
+                    .map(|(k, _)| k.clone())
+                    .collect();
 
-    let invoice_id = invoice.invoice_id.clone();
+                if buyers.is_empty() || sellers.is_empty() {
+                    break;
+                }
 
-    agents.buyers[buyer_idx]
-        .agent
-        .accept_invoice(invoice)
-        .map_err(|e| e.to_string())?;
+                let b = buyers[round as usize % buyers.len()].clone();
+                let s = sellers[round as usize % sellers.len()].clone();
+                (b, s)
+            };
 
-    let (_, escrow) = agents.buyers[buyer_idx]
-        .agent
-        .pay_invoice(&invoice_id)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let escrow_id = escrow.escrow_id.clone();
-
-    agents.sellers[seller_idx]
-        .agent
-        .deliver_service(&invoice_id, "Auto-delivered".to_string())
-        .map_err(|e| e.to_string())?;
-
-    let amount = agents.buyers[buyer_idx]
-        .agent
-        .confirm_delivery(&escrow_id)
-        .map_err(|e| e.to_string())?;
-
-    agents.sellers[seller_idx]
-        .agent
-        .receive_payment(amount)
-        .map_err(|e| e.to_string())?;
-
-    agents.trade_count += 1;
-    agents.total_volume += amount.0;
-
-    let _ = state.events.send(PlaygroundEvent::TradeCompleted {
-        buyer_id: buyer_id.to_string(),
-        seller_id: seller_id.to_string(),
-        amount: amount.0,
-        receipt_id: escrow_id.0,
+            let _ = execute_trade_internal(&state_clone, &buyer_id, &seller_id).await;
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
     });
 
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Simulation started: {} buyers, {} sellers, {} rounds", num_buyers, num_sellers, rounds)
+    })))
+}
+
+// Helper functions for internal use (avoid duplicate code)
+async fn create_buyer_internal(state: &Arc<SystemState>, req: CreateBuyerRequest) -> Result<(), String> {
+    let funding = req.funding.unwrap_or(500_00);
+    let agent_id = format!("res_{}", req.name.to_lowercase().replace(' ', "_"));
+
+    let brain = {
+        let llm = LLMRouter::from_env();
+        if llm.is_available().await {
+            AgentBrain::with_llm(LLMRouter::from_env())
+        } else {
+            AgentBrain::deterministic()
+        }
+    };
+
+    let resonator_handle = state.runtime.register_agent(&req.name, ResonatorAgentRole::Buyer).await.ok();
+
+    let mut agent = MapleResonatorAgent::new_buyer(&req.name, state.ledger.clone(), brain, resonator_handle);
+
+    let resonator_id = ResonatorId::from_string(&agent_id);
+    let mint = MintIntent::new(resonator_id, Amount::new(funding), "Simulation funding");
+    {
+        let issuer = state.issuer.read().await;
+        issuer.mint(mint).await.map_err(|e| e.to_string())?;
+    }
+
+    agent.as_buyer_mut().unwrap()
+        .setup(Amount::new(funding), Amount::new(funding / 2))
+        .map_err(|e| e.to_string())?;
+
+    let mut registry = state.agents.write().await;
+    registry.agents.insert(agent_id, agent);
     Ok(())
 }
 
-async fn reset_playground(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let mut agents = state.agents.write().await;
-    agents.buyers.clear();
-    agents.sellers.clear();
-    agents.trade_count = 0;
-    agents.total_volume = 0;
+async fn create_seller_internal(state: &Arc<SystemState>, req: CreateSellerRequest) -> Result<(), String> {
+    let agent_id = format!("res_{}", req.name.to_lowercase().replace(' ', "_"));
+    let brain = AgentBrain::deterministic();
+    let resonator_handle = state.runtime.register_agent(&req.name, ResonatorAgentRole::Seller).await.ok();
+
+    let mut agent = MapleResonatorAgent::new_seller(&req.name, state.ledger.clone(), brain, resonator_handle);
+
+    let service = Service {
+        name: req.service_name.clone(),
+        description: format!("AI service: {}", req.service_name),
+        price: Amount::new(req.price),
+        asset: AssetId::iusd(),
+        delivery_conditions: vec!["Service completion".to_string()],
+    };
+    agent.as_seller_mut().unwrap().publish_service(service);
+
+    let mut registry = state.agents.write().await;
+    registry.agents.insert(agent_id, agent);
+    Ok(())
+}
+
+// ============================================================================
+// Issuer / Supply
+// ============================================================================
+
+async fn get_supply(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let issuer = state.issuer.read().await;
+    let total = issuer.total_supply().await;
+    let remaining = issuer.remaining_supply().await;
+    let receipts = issuer.receipts().await;
+
+    Json(serde_json::json!({
+        "total_supply": total.0,
+        "remaining_supply": remaining.0,
+        "total_display": format!("${:.2}", total.0 as f64 / 100.0),
+        "remaining_display": format!("${:.2}", remaining.0 as f64 / 100.0),
+        "receipt_count": receipts.len()
+    }))
+}
+
+async fn get_issuer_receipts(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let issuer = state.issuer.read().await;
+    let receipts = issuer.recent_receipts(50).await;
+
+    let receipt_list: Vec<serde_json::Value> = receipts.iter().map(|r| {
+        serde_json::json!({
+            "receipt_id": r.receipt_id,
+            "operation": format!("{:?}", r.operation),
+            "target": r.target.0,
+            "amount": r.amount.0,
+            "amount_display": format!("${:.2}", r.amount.0 as f64 / 100.0),
+            "issued_at": r.issued_at
+        })
+    }).collect();
+
+    Json(serde_json::json!({
+        "receipts": receipt_list,
+        "count": receipt_list.len()
+    }))
+}
+
+// ============================================================================
+// Ledger
+// ============================================================================
+
+async fn get_ledger_accounts(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let account_ids = state.ledger.all_accounts().await;
+    let iusd = AssetId::iusd();
+
+    let mut entries = Vec::new();
+    for account_id in &account_ids {
+        let balance = state.ledger.balance(account_id, &iusd).await;
+        entries.push(serde_json::json!({
+            "account_id": account_id.0,
+            "balance": balance.0,
+            "balance_display": format!("${:.2}", balance.0 as f64 / 100.0)
+        }));
+    }
+
+    let entry_count = state.ledger.entry_count().await;
+    let recent = state.ledger.recent_entries(20).await;
+    let recent_entries: Vec<serde_json::Value> = recent.iter().map(|e| {
+        serde_json::json!({
+            "entry_id": e.entry_id.0,
+            "account": e.account.0,
+            "entry_type": format!("{:?}", e.entry_type),
+            "amount": e.amount.0,
+            "amount_display": format!("${:.2}", e.amount.0 as f64 / 100.0),
+            "balance_after": e.balance_after.0,
+            "reason": format!("{:?}", e.reason),
+            "created_at": e.created_at
+        })
+    }).collect();
+
+    Json(serde_json::json!({
+        "accounts": entries,
+        "account_count": account_ids.len(),
+        "total_entries": entry_count,
+        "recent_entries": recent_entries
+    }))
+}
+
+// ============================================================================
+// Transactions & Receipts
+// ============================================================================
+
+async fn get_transactions(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let registry = state.agents.read().await;
+    Json(serde_json::json!({
+        "transactions": registry.transactions,
+        "count": registry.transactions.len()
+    }))
+}
+
+async fn get_receipts(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let registry = state.agents.read().await;
+    Json(serde_json::json!({
+        "receipts": registry.receipts,
+        "count": registry.receipts.len()
+    }))
+}
+
+// ============================================================================
+// Maple Resonators
+// ============================================================================
+
+async fn get_resonators(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let registry = state.agents.read().await;
+    let runtime_status = state.runtime.status().await;
+
+    let resonators: Vec<serde_json::Value> = registry.agents.values().map(|a| {
+        serde_json::json!({
+            "id": a.id().0,
+            "name": a.name,
+            "role": a.role(),
+            "has_resonator_handle": a.resonator_handle.is_some(),
+            "maple_profile": serde_json::to_value(a.maple_profile()).ok(),
+            "presence": a.presence,
+            "trade_count": a.trade_count,
+        })
+    }).collect();
+
+    Json(serde_json::json!({
+        "runtime": runtime_status,
+        "resonators": resonators,
+        "count": resonators.len()
+    }))
+}
+
+// ============================================================================
+// System Log
+// ============================================================================
+
+async fn get_system_log(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let log = state.activity_log.read().await;
+    let entries: Vec<&openibank_state::activity::ActivityEntry> = log.iter().take(100).collect();
+
+    Json(serde_json::json!({
+        "entries": entries,
+        "count": log.len()
+    }))
+}
+
+// ============================================================================
+// Reset
+// ============================================================================
+
+async fn reset_playground(State(state): State<Arc<SystemState>>) -> Json<serde_json::Value> {
+    let mut registry = state.agents.write().await;
+    registry.agents.clear();
+    registry.trade_count = 0;
+    registry.total_volume = 0;
+    registry.transactions.clear();
+    registry.receipts.clear();
+
+    state.emit_event(SystemEvent::SystemReset {
+        timestamp: Utc::now(),
+    });
 
     Json(serde_json::json!({
         "success": true,
@@ -698,43 +1237,20 @@ async fn reset_playground(State(state): State<Arc<AppState>>) -> Json<serde_json
 // ============================================================================
 
 async fn event_stream(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<SystemState>>,
 ) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
-    let mut rx = state.events.subscribe();
+    let mut rx = state.subscribe();
 
-    // Send initial state
-    let agents = state.agents.read().await;
-    let initial_state = PlaygroundEvent::StateSync {
-        buyers: agents
-            .buyers
-            .iter()
-            .map(|b| AgentSummary {
-                id: b.id.clone(),
-                name: b.name.clone(),
-                balance: b.agent.balance().0,
-                service: None,
-                price: None,
-            })
-            .collect(),
-        sellers: agents
-            .sellers
-            .iter()
-            .map(|s| AgentSummary {
-                id: s.id.clone(),
-                name: s.name.clone(),
-                balance: s.agent.balance().0,
-                service: Some(s.service.name.clone()),
-                price: Some(s.service.price.0),
-            })
-            .collect(),
-        trade_count: agents.trade_count,
-        total_volume: agents.total_volume,
-    };
-    drop(agents);
+    // Send initial state sync
+    let summary = state.status_summary().await;
+    let initial_data = serde_json::json!({
+        "type": "state_sync",
+        "data": summary
+    });
 
     let initial_event = Event::default()
         .event("state_sync")
-        .data(serde_json::to_string(&initial_state).unwrap_or_default());
+        .data(serde_json::to_string(&initial_data).unwrap_or_default());
 
     let stream = async_stream::stream! {
         yield Ok(initial_event);
@@ -742,19 +1258,38 @@ async fn event_stream(
         loop {
             match rx.recv().await {
                 Ok(event) => {
-                    let event_type = match &event {
-                        PlaygroundEvent::AgentCreated { .. } => "agent_created",
-                        PlaygroundEvent::BalanceUpdated { .. } => "balance_updated",
-                        PlaygroundEvent::TradeStarted { .. } => "trade_started",
-                        PlaygroundEvent::LLMReasoning { .. } => "llm_reasoning",
-                        PlaygroundEvent::TradeCompleted { .. } => "trade_completed",
-                        PlaygroundEvent::TradeFailed { .. } => "trade_failed",
-                        PlaygroundEvent::StateSync { .. } => "state_sync",
-                        PlaygroundEvent::Error { .. } => "error",
+                    let event_name = match &event {
+                        SystemEvent::AgentCreated { .. } => "agent_created",
+                        SystemEvent::AgentStateChanged { .. } => "agent_state_changed",
+                        SystemEvent::BalanceUpdated { .. } => "balance_updated",
+                        SystemEvent::TradeStarted { .. } => "trade_started",
+                        SystemEvent::TradeCompleted { .. } => "trade_completed",
+                        SystemEvent::TradeFailed { .. } => "trade_failed",
+                        SystemEvent::LLMReasoning { .. } => "llm_reasoning",
+                        SystemEvent::ReceiptGenerated { .. } => "receipt_generated",
+                        SystemEvent::IssuerEvent { .. } => "issuer_event",
+                        SystemEvent::LedgerEntry { .. } => "ledger_entry",
+                        SystemEvent::EscrowEvent { .. } => "escrow_event",
+                        SystemEvent::DisputeEvent { .. } => "dispute_event",
+                        SystemEvent::SystemStatus { .. } => "system_status",
+                        SystemEvent::SystemReset { .. } => "system_reset",
+                        SystemEvent::MapleRuntimeEvent { .. } => "maple_runtime",
+                        SystemEvent::CouplingEstablished { .. } => "coupling_established",
+                        SystemEvent::CouplingStrengthened { .. } => "coupling_strengthened",
+                        SystemEvent::CouplingWeakened { .. } => "coupling_weakened",
+                        SystemEvent::Decoupled { .. } => "decoupled",
+                        SystemEvent::CommitmentSubmitted { .. } => "commitment_submitted",
+                        SystemEvent::CommitmentApproved { .. } => "commitment_approved",
+                        SystemEvent::CommitmentRejected { .. } => "commitment_rejected",
+                        SystemEvent::CommitmentOutcomeRecorded { .. } => "commitment_outcome",
+                        SystemEvent::AttentionAllocated { .. } => "attention_allocated",
+                        SystemEvent::AttentionExhausted { .. } => "attention_exhausted",
+                        SystemEvent::CapabilityGranted { .. } => "capability_granted",
+                        SystemEvent::CapabilityDenied { .. } => "capability_denied",
                     };
 
                     yield Ok(Event::default()
-                        .event(event_type)
+                        .event(event_name)
                         .data(serde_json::to_string(&event).unwrap_or_default()));
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
@@ -768,6 +1303,68 @@ async fn event_stream(
             .interval(Duration::from_secs(15))
             .text("ping"),
     )
+}
+
+// ============================================================================
+// UAL Command Endpoint
+// ============================================================================
+
+#[derive(Deserialize)]
+struct UalRequest {
+    command: String,
+}
+
+async fn execute_ual(
+    State(_state): State<Arc<SystemState>>,
+    Json(req): Json<UalRequest>,
+) -> Json<serde_json::Value> {
+    use openibank_ual::{parse_input, compile_statements, ParsedInput};
+
+    match parse_input(&req.command) {
+        Ok(ParsedInput::Ual(statements)) => {
+            match compile_statements(&statements) {
+                Ok(compiled) => {
+                    let artifacts: Vec<serde_json::Value> = compiled.iter()
+                        .map(|c| serde_json::to_value(c).unwrap_or_default())
+                        .collect();
+                    Json(serde_json::json!({
+                        "success": true,
+                        "type": "ual",
+                        "statement_count": statements.len(),
+                        "compiled": artifacts,
+                        "message": format!("Compiled {} UAL statement(s)", statements.len()),
+                    }))
+                }
+                Err(e) => Json(serde_json::json!({
+                    "success": false,
+                    "error": format!("Compilation error: {}", e),
+                })),
+            }
+        }
+        Ok(ParsedInput::Banking(cmd)) => {
+            Json(serde_json::json!({
+                "success": true,
+                "type": "banking",
+                "command": serde_json::to_value(&cmd).unwrap_or_default(),
+                "message": "Banking command parsed (execute via openibank-server for full support)",
+            }))
+        }
+        Err(e) => Json(serde_json::json!({
+            "success": false,
+            "error": format!("Parse error: {}", e),
+            "hint": "Try: STATUS, BALANCE <agent>, or UAL COMMIT statements",
+        })),
+    }
+}
+
+async fn get_info() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "name": "OpeniBank",
+        "version": env!("CARGO_PKG_VERSION"),
+        "homepage": "https://www.openibank.com",
+        "repository": "https://github.com/openibank/openibank",
+        "architecture": "Maple Resonance Architecture + PALM Fleet + UAL Commands",
+    }))
 }
 
 // ============================================================================

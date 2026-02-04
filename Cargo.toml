@@ -8,10 +8,15 @@ members = [
     "crates/openibank-agents",
     "crates/openibank-guard",
     "crates/openibank-receipts",
+    "crates/openibank-maple",
+    "crates/openibank-palm",
+    "crates/openibank-ual",
+    "crates/openibank-state",
     "crates/openibank-cli",
     "services/openibank-issuer-resonator",
     "services/openibank-playground",
     "services/openibank-mcp",
+    "services/openibank-server",
 ]
 
 [workspace.package]
@@ -70,6 +75,30 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # Environment
 dotenvy = "0.15"
 
+# Maple AI Framework (Resonance Architecture)
+maple-runtime = { path = "../maple/crates/maple-runtime" }
+resonator-types = { path = "../maple/crates/resonator-types" }
+rcf-types = { path = "../maple/crates/rcf-types" }
+rcf-commitment = { path = "../maple/crates/rcf-commitment" }
+aas-types = { path = "../maple/crates/aas-types" }
+aas-policy = { path = "../maple/crates/aas-policy" }
+aas-service = { path = "../maple/crates/aas-service" }
+aas-identity = { path = "../maple/crates/aas-identity" }
+aas-capability = { path = "../maple/crates/aas-capability" }
+aas-adjudication = { path = "../maple/crates/aas-adjudication" }
+aas-ledger = { path = "../maple/crates/aas-ledger" }
+
+# PALM Fleet Orchestration (Maple)
+palm-types = { path = "../maple/crates/palm-types" }
+palm-registry = { path = "../maple/crates/palm-registry" }
+palm-deployment = { path = "../maple/crates/palm-deployment" }
+palm-health = { path = "../maple/crates/palm-health" }
+
+# UAL Universal Agent Language (Maple)
+ual-types = { path = "../maple/crates/ual-types" }
+ual-parser = { path = "../maple/crates/ual-parser" }
+ual-compiler = { path = "../maple/crates/ual-compiler" }
+
 # Workspace crates
 openibank-core = { path = "crates/openibank-core" }
 openibank-ledger = { path = "crates/openibank-ledger" }
@@ -78,3 +107,7 @@ openibank-llm = { path = "crates/openibank-llm" }
 openibank-agents = { path = "crates/openibank-agents" }
 openibank-guard = { path = "crates/openibank-guard" }
 openibank-receipts = { path = "crates/openibank-receipts" }
+openibank-maple = { path = "crates/openibank-maple" }
+openibank-palm = { path = "crates/openibank-palm" }
+openibank-ual = { path = "crates/openibank-ual" }
+openibank-state = { path = "crates/openibank-state" }

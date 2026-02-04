@@ -1,0 +1,35 @@
+[package]
+name = "openibank-palm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PALM fleet orchestration for OpeniBank agent banking"
+
+[dependencies]
+# PALM Fleet Orchestration (Maple)
+palm-types = { path = "../../../maple/crates/palm-types" }
+palm-registry = { path = "../../../maple/crates/palm-registry" }
+palm-deployment = { path = "../../../maple/crates/palm-deployment" }
+palm-health = { path = "../../../maple/crates/palm-health" }
+
+# Maple core
+maple-runtime = { workspace = true }
+
+# OpeniBank
+openibank-core = { workspace = true }
+openibank-maple = { workspace = true }
+
+# Shared deps
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+semver = "1.0"
+
+[dev-dependencies]
+tokio = { workspace = true }

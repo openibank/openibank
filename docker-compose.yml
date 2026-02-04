@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  openibank:
+    build:
+      context: ..
+      dockerfile: openibank/Dockerfile
+    ports:
+      - "${OPENIBANK_PORT:-8080}:8080"
+    environment:
+      - OPENIBANK_HOST=0.0.0.0
+      - OPENIBANK_PORT=8080
+      - RUST_LOG=${RUST_LOG:-info}
+      # LLM configuration (optional)
+      - OPENIBANK_LLM_PROVIDER=${OPENIBANK_LLM_PROVIDER:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Local LLM with Ollama
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    profiles:
+      - llm
+
+volumes:
+  ollama_data:

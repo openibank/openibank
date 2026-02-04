@@ -3,859 +3,1381 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpeniBank Playground - AI Agent Trading Demo</title>
+    <title>OpeniBank Dashboard - Maple AI Framework</title>
     <style>
         :root {
             --primary: #6366f1;
             --primary-dark: #4f46e5;
+            --primary-light: rgba(99, 102, 241, 0.15);
             --success: #22c55e;
+            --success-light: rgba(34, 197, 94, 0.15);
             --warning: #f59e0b;
+            --warning-light: rgba(245, 158, 11, 0.15);
             --danger: #ef4444;
+            --danger-light: rgba(239, 68, 68, 0.15);
+            --cyan: #06b6d4;
+            --cyan-light: rgba(6, 182, 212, 0.15);
+            --purple: #a855f7;
+            --purple-light: rgba(168, 85, 247, 0.15);
             --bg: #0f172a;
             --bg-card: #1e293b;
             --bg-highlight: #334155;
+            --bg-input: #0f172a;
             --text: #f1f5f9;
             --text-muted: #94a3b8;
-            --border: #475569;
+            --text-dim: #64748b;
+            --border: #334155;
+            --border-light: #475569;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 2rem;
-            padding-bottom: 2rem;
+        /* ===== Top Bar ===== */
+        .topbar {
+            background: var(--bg-card);
             border-bottom: 1px solid var(--border);
+            padding: 0.75rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
 
         .logo {
-            font-size: 2.5rem;
+            font-size: 1.25rem;
             font-weight: 800;
-            background: linear-gradient(135deg, var(--primary) 0%, #a855f7 100%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--purple) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            white-space: nowrap;
         }
 
-        .subtitle {
-            color: var(--text-muted);
-            margin-top: 0.5rem;
-            font-size: 1.1rem;
-        }
-
-        .status-bar {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-top: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .status-item {
+        .topbar-status {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: var(--bg-card);
-            border-radius: 9999px;
-            font-size: 0.875rem;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--success);
-        }
-
-        .status-dot.inactive {
-            background: var(--text-muted);
-        }
-
-        .main-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
             gap: 1.5rem;
         }
 
-        @media (max-width: 1024px) {
-            .main-grid {
-                grid-template-columns: 1fr;
-            }
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding: 0.3rem 0.75rem;
+            background: var(--bg);
+            border-radius: 9999px;
+            border: 1px solid var(--border);
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--text-dim);
+        }
+
+        .dot.green { background: var(--success); box-shadow: 0 0 6px var(--success); }
+        .dot.yellow { background: var(--warning); }
+        .dot.red { background: var(--danger); }
+
+        /* ===== Tab Navigation ===== */
+        .tab-nav {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            padding: 0 2rem;
+            gap: 0;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            padding: 0.85rem 1.25rem;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .tab-icon { font-size: 1rem; }
+
+        /* ===== Main Content ===== */
+        .main { padding: 1.5rem 2rem; max-width: 1600px; margin: 0 auto; }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ===== Cards & Grid ===== */
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+
+        @media (max-width: 1200px) {
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .grid-3 { grid-template-columns: 1fr; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .grid-2-1 { grid-template-columns: 1fr; }
         }
 
         .card {
             background: var(--bg-card);
-            border-radius: 1rem;
-            padding: 1.5rem;
+            border-radius: 0.75rem;
             border: 1px solid var(--border);
+            overflow: hidden;
         }
 
         .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
+            padding: 1rem 1.25rem;
             border-bottom: 1px solid var(--border);
         }
 
         .card-title {
-            font-size: 1.25rem;
+            font-size: 0.95rem;
             font-weight: 600;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
-        .badge {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 9999px;
-            background: var(--primary);
-            color: white;
-        }
+        .card-body { padding: 1.25rem; }
 
-        .badge.success {
-            background: var(--success);
-        }
-
-        .badge.warning {
-            background: var(--warning);
-        }
-
-        .agent-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .agent-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background: var(--bg-highlight);
-            border-radius: 0.5rem;
-            transition: transform 0.2s;
-        }
-
-        .agent-item:hover {
-            transform: translateX(4px);
-        }
-
-        .agent-info h4 {
-            font-weight: 600;
-            margin-bottom: 0.25rem;
-        }
-
-        .agent-info p {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-        }
-
-        .agent-balance {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--success);
-        }
-
-        .controls {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .form-group label {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-        }
-
-        input, select {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 0.5rem;
-            padding: 0.75rem 1rem;
-            color: var(--text);
-            font-size: 1rem;
-            width: 100%;
-        }
-
-        input:focus, select:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        button {
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 0.5rem;
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background: var(--primary-dark);
-        }
-
-        button:disabled {
-            background: var(--border);
-            cursor: not-allowed;
-        }
-
-        button.secondary {
-            background: transparent;
-            border: 1px solid var(--border);
-        }
-
-        button.secondary:hover {
-            background: var(--bg-highlight);
-        }
-
-        button.success {
-            background: var(--success);
-        }
-
-        button.danger {
-            background: var(--danger);
-        }
-
-        .trade-btn-group {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .trade-btn-group button {
-            flex: 1;
-        }
-
-        .event-feed {
-            max-height: 400px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .event-item {
-            padding: 0.75rem 1rem;
-            background: var(--bg-highlight);
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            border-left: 3px solid var(--primary);
-            animation: slideIn 0.3s ease-out;
-        }
-
-        .event-item.trade {
-            border-left-color: var(--success);
-        }
-
-        .event-item.reasoning {
-            border-left-color: var(--warning);
-            font-style: italic;
-        }
-
-        .event-item.error {
-            border-left-color: var(--danger);
-        }
-
-        .event-time {
-            color: var(--text-muted);
-            font-size: 0.75rem;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
+        /* ===== Stat Cards ===== */
         .stat-card {
-            background: var(--bg-highlight);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--primary);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
         }
 
         .stat-label {
             font-size: 0.75rem;
             color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .stat-value.primary { color: var(--primary); }
+        .stat-value.success { color: var(--success); }
+        .stat-value.warning { color: var(--warning); }
+        .stat-value.cyan { color: var(--cyan); }
+        .stat-value.purple { color: var(--purple); }
+
+        .stat-sub {
+            font-size: 0.75rem;
+            color: var(--text-dim);
             margin-top: 0.25rem;
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-muted);
+        /* ===== Badges ===== */
+        .badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
         }
 
-        .empty-state-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
+        .badge-primary { background: var(--primary-light); color: var(--primary); }
+        .badge-success { background: var(--success-light); color: var(--success); }
+        .badge-warning { background: var(--warning-light); color: var(--warning); }
+        .badge-danger { background: var(--danger-light); color: var(--danger); }
+        .badge-cyan { background: var(--cyan-light); color: var(--cyan); }
+        .badge-purple { background: var(--purple-light); color: var(--purple); }
+        .badge-count { background: var(--bg-highlight); color: var(--text); min-width: 1.5rem; text-align: center; }
 
-        .llm-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
+        /* ===== Agent Cards ===== */
+        .agent-card {
             background: var(--bg-highlight);
             border-radius: 0.5rem;
+            padding: 1rem 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.15s, box-shadow 0.15s;
+            cursor: default;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .agent-name { font-weight: 600; font-size: 0.95rem; }
+        .agent-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+        .agent-balance { font-size: 1.2rem; font-weight: 700; color: var(--success); }
+        .agent-role-tag { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; }
+
+        .agent-cards-list { display: flex; flex-direction: column; gap: 0.6rem; max-height: 400px; overflow-y: auto; }
+
+        /* ===== Tables ===== */
+        .table-wrap { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        thead th {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tbody td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+        .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8rem; }
+
+        /* ===== Event Feed ===== */
+        .event-feed {
+            max-height: 500px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .ev {
+            padding: 0.6rem 0.85rem;
+            background: var(--bg);
+            border-radius: 0.4rem;
+            font-size: 0.82rem;
+            border-left: 3px solid var(--border-light);
+            animation: fadeSlide 0.25s ease-out;
+            display: flex;
+            gap: 0.6rem;
+            align-items: baseline;
+        }
+
+        .ev.trade { border-left-color: var(--success); }
+        .ev.llm { border-left-color: var(--warning); }
+        .ev.system { border-left-color: var(--primary); }
+        .ev.error { border-left-color: var(--danger); }
+        .ev.escrow { border-left-color: var(--cyan); }
+        .ev.maple { border-left-color: var(--purple); }
+
+        .ev-time { color: var(--text-dim); font-size: 0.72rem; white-space: nowrap; font-family: monospace; }
+        .ev-msg { flex: 1; }
+
+        @keyframes fadeSlide {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== Forms ===== */
+        .form-row { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
+
+        .form-group { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 140px; }
+        .form-group label { font-size: 0.75rem; color: var(--text-muted); }
+
+        input, select {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 0.4rem;
+            padding: 0.6rem 0.75rem;
+            color: var(--text);
             font-size: 0.875rem;
-            margin-top: 1rem;
+            width: 100%;
         }
 
-        .llm-indicator.active {
-            background: rgba(34, 197, 94, 0.2);
-            color: var(--success);
+        input:focus, select:focus { outline: none; border-color: var(--primary); }
+
+        /* ===== Buttons ===== */
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: 0.4rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
         }
 
-        .pulse {
-            animation: pulse 2s infinite;
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { filter: brightness(1.1); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { filter: brightness(1.1); }
+        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: var(--bg-highlight); color: var(--text); }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.78rem; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-group { display: flex; gap: 0.5rem; }
+
+        /* ===== Filter Buttons ===== */
+        .filter-group { display: flex; gap: 0.25rem; }
+
+        .filter-btn {
+            padding: 0.35rem 0.7rem;
+            border: 1px solid var(--border);
+            border-radius: 0.3rem;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s;
         }
 
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
+        .filter-btn:hover { background: var(--bg-highlight); }
+        .filter-btn.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+
+        /* ===== Empty State ===== */
+        .empty {
+            text-align: center;
+            padding: 2.5rem;
+            color: var(--text-dim);
         }
+
+        .empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+
+        /* ===== Misc ===== */
+        .text-success { color: var(--success); }
+        .text-warning { color: var(--warning); }
+        .text-danger { color: var(--danger); }
+        .text-muted { color: var(--text-muted); }
+        .text-cyan { color: var(--cyan); }
+        .text-purple { color: var(--purple); }
+        .fw-bold { font-weight: 700; }
+        .mt-1 { margin-top: 0.5rem; }
+        .mb-1 { margin-bottom: 0.75rem; }
+
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
         footer {
             text-align: center;
-            margin-top: 3rem;
-            padding-top: 2rem;
+            padding: 2rem;
+            color: var(--text-dim);
+            font-size: 0.8rem;
             border-top: 1px solid var(--border);
-            color: var(--text-muted);
+            margin-top: 3rem;
         }
 
-        footer a {
-            color: var(--primary);
-            text-decoration: none;
-        }
-
-        footer a:hover {
-            text-decoration: underline;
-        }
+        footer a { color: var(--primary); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1 class="logo">🏦 OpeniBank Playground</h1>
-            <p class="subtitle">Watch AI agents trade in real-time with verifiable receipts</p>
-            <div class="status-bar">
-                <div class="status-item">
-                    <span class="status-dot" id="connectionStatus"></span>
-                    <span id="connectionText">Connecting...</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-dot" id="llmStatus"></span>
-                    <span id="llmText">LLM: Checking...</span>
-                </div>
+    <!-- ===== Top Bar ===== -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <span class="logo">OpeniBank</span>
+            <span style="color:var(--text-dim);font-size:0.8rem">v<span id="sysVersion">0.1.0</span></span>
+        </div>
+        <div class="topbar-status">
+            <div class="status-pill">
+                <span class="dot" id="dotConnection"></span>
+                <span id="txtConnection">Connecting...</span>
             </div>
-        </header>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value" id="totalTrades">0</div>
-                <div class="stat-label">Total Trades</div>
+            <div class="status-pill">
+                <span class="dot" id="dotMaple"></span>
+                <span id="txtMaple">Maple Runtime</span>
             </div>
-            <div class="stat-card">
-                <div class="stat-value" id="totalVolume">$0.00</div>
-                <div class="stat-label">Trading Volume</div>
+            <div class="status-pill">
+                <span class="dot" id="dotLLM"></span>
+                <span id="txtLLM">LLM: Checking...</span>
             </div>
-            <div class="stat-card">
-                <div class="stat-value" id="activeAgents">0</div>
-                <div class="stat-label">Active Agents</div>
+            <div class="status-pill">
+                <span style="font-size:0.8rem;color:var(--text-dim)">Uptime:</span>
+                <span id="txtUptime" style="font-size:0.8rem">0s</span>
             </div>
         </div>
-
-        <div class="main-grid">
-            <!-- Buyers Panel -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        🛒 Buyers
-                        <span class="badge" id="buyerCount">0</span>
-                    </h2>
-                </div>
-                <div class="agent-list" id="buyerList">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🤖</div>
-                        <p>No buyers yet. Create one below!</p>
-                    </div>
-                </div>
-                <div class="controls" style="margin-top: 1rem;">
-                    <div class="form-group">
-                        <label>Buyer Name</label>
-                        <input type="text" id="buyerName" placeholder="e.g., Alice">
-                    </div>
-                    <div class="form-group">
-                        <label>Initial Funding ($)</label>
-                        <input type="number" id="buyerFunding" value="500" min="1">
-                    </div>
-                    <button onclick="createBuyer()">+ Add Buyer Agent</button>
-                </div>
-            </div>
-
-            <!-- Sellers Panel -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        🏪 Sellers
-                        <span class="badge" id="sellerCount">0</span>
-                    </h2>
-                </div>
-                <div class="agent-list" id="sellerList">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🏭</div>
-                        <p>No sellers yet. Create one below!</p>
-                    </div>
-                </div>
-                <div class="controls" style="margin-top: 1rem;">
-                    <div class="form-group">
-                        <label>Seller Name</label>
-                        <input type="text" id="sellerName" placeholder="e.g., DataCorp">
-                    </div>
-                    <div class="form-group">
-                        <label>Service Name</label>
-                        <input type="text" id="serviceName" placeholder="e.g., Data Analysis">
-                    </div>
-                    <div class="form-group">
-                        <label>Price ($)</label>
-                        <input type="number" id="servicePrice" value="50" min="1">
-                    </div>
-                    <button onclick="createSeller()">+ Add Seller Agent</button>
-                </div>
-            </div>
-
-            <!-- Activity Feed -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        📡 Live Activity
-                    </h2>
-                    <button class="secondary" onclick="clearEvents()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Clear</button>
-                </div>
-                <div class="event-feed" id="eventFeed">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📻</div>
-                        <p>Waiting for events...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Trading Controls -->
-        <div class="card" style="margin-top: 1.5rem;">
-            <div class="card-header">
-                <h2 class="card-title">⚡ Trading Controls</h2>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 1rem; align-items: end;">
-                <div class="form-group">
-                    <label>Select Buyer</label>
-                    <select id="tradeBuyer">
-                        <option value="">-- Select Buyer --</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Select Seller</label>
-                    <select id="tradeSeller">
-                        <option value="">-- Select Seller --</option>
-                    </select>
-                </div>
-                <div class="trade-btn-group">
-                    <button class="success" onclick="executeTrade()">Execute Trade</button>
-                </div>
-                <div class="trade-btn-group">
-                    <button onclick="startAutoTrading()">🔄 Auto Trade (10 rounds)</button>
-                    <button class="danger" onclick="resetPlayground()">🗑️ Reset</button>
-                </div>
-            </div>
-        </div>
-
-        <footer>
-            <p>Built with 🦀 Rust &amp; 💜 by <a href="https://github.com/openibank/openibank" target="_blank">OpeniBank</a></p>
-            <p style="margin-top: 0.5rem; font-size: 0.875rem;">AI agents need banks too. This is how they'll pay each other.</p>
-        </footer>
     </div>
 
-    <script>
-        // State
-        let buyers = [];
-        let sellers = [];
-        let eventSource = null;
+    <!-- ===== Tab Navigation ===== -->
+    <div class="tab-nav">
+        <button class="tab-btn active" data-tab="overview"><span class="tab-icon">&#9679;</span> Overview</button>
+        <button class="tab-btn" data-tab="agents"><span class="tab-icon">&#9670;</span> Agents</button>
+        <button class="tab-btn" data-tab="trading"><span class="tab-icon">&#9733;</span> Trading</button>
+        <button class="tab-btn" data-tab="ledger"><span class="tab-icon">&#9783;</span> Ledger</button>
+        <button class="tab-btn" data-tab="receipts"><span class="tab-icon">&#10003;</span> Receipts</button>
+        <button class="tab-btn" data-tab="activity"><span class="tab-icon">&#9881;</span> Activity Log</button>
+        <button class="tab-btn" data-tab="settings"><span class="tab-icon">&#9881;</span> Settings</button>
+    </div>
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            connectSSE();
-            checkStatus();
+    <!-- ===== Main Content ===== -->
+    <div class="main">
+
+        <!-- =============================== OVERVIEW TAB =============================== -->
+        <div class="tab-panel active" id="panel-overview">
+            <!-- Stats Row -->
+            <div class="grid-4">
+                <div class="stat-card">
+                    <div class="stat-label">Total Agents</div>
+                    <div class="stat-value primary" id="statAgents">0</div>
+                    <div class="stat-sub"><span id="statBuyers">0</span> buyers, <span id="statSellers">0</span> sellers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Trades Completed</div>
+                    <div class="stat-value success" id="statTrades">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Trading Volume</div>
+                    <div class="stat-value warning" id="statVolume">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">IUSD Total Supply</div>
+                    <div class="stat-value cyan" id="statSupply">$0.00</div>
+                    <div class="stat-sub">Remaining: <span id="statRemaining">$0.00</span></div>
+                </div>
+            </div>
+
+            <!-- Quick Actions + Activity -->
+            <div class="grid-2-1">
+                <!-- Agent Quick View -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Agent Overview</span>
+                        <button class="btn btn-sm btn-ghost" onclick="switchTab('agents')">View All</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="agent-cards-list" id="overviewAgentList">
+                            <div class="empty"><div class="empty-icon">&#129302;</div><p>No agents yet. Create agents in the Trading tab.</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Controls -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Quick Actions</span>
+                    </div>
+                    <div class="card-body">
+                        <div style="display:flex;flex-direction:column;gap:0.75rem">
+                            <button class="btn btn-primary" onclick="runSimulation()" style="width:100%">Simulate Marketplace</button>
+                            <div style="display:flex;gap:0.5rem">
+                                <input id="simBuyers" type="number" value="3" min="1" max="5" style="width:50%" placeholder="Buyers">
+                                <input id="simSellers" type="number" value="2" min="1" max="5" style="width:50%" placeholder="Sellers">
+                            </div>
+                            <div style="display:flex;gap:0.5rem">
+                                <input id="simRounds" type="number" value="10" min="1" max="50" style="width:50%" placeholder="Rounds">
+                                <input id="simDelay" type="number" value="500" min="100" max="5000" style="width:50%" placeholder="Delay(ms)">
+                            </div>
+                            <hr style="border-color:var(--border)">
+                            <button class="btn btn-danger btn-sm" onclick="resetPlayground()" style="width:100%">Reset All</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Feed -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Live Event Feed</span>
+                    <div class="btn-group">
+                        <div class="filter-group" id="overviewFilters">
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="trade">Trades</button>
+                            <button class="filter-btn" data-filter="llm">LLM</button>
+                            <button class="filter-btn" data-filter="system">System</button>
+                        </div>
+                        <button class="btn btn-sm btn-ghost" onclick="clearEvents()">Clear</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="event-feed" id="eventFeed">
+                        <div class="empty"><div class="empty-icon">&#128225;</div><p>Waiting for events...</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================== AGENTS TAB =============================== -->
+        <div class="tab-panel" id="panel-agents">
+            <div class="grid-2">
+                <!-- Buyers -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Buyers <span class="badge badge-count" id="agBuyerCount">0</span></span>
+                    </div>
+                    <div class="card-body">
+                        <div class="agent-cards-list" id="agBuyerList">
+                            <div class="empty"><div class="empty-icon">&#128722;</div><p>No buyers yet</p></div>
+                        </div>
+                        <hr style="border-color:var(--border);margin:1rem 0">
+                        <div class="form-row">
+                            <div class="form-group"><label>Name</label><input type="text" id="inBuyerName" placeholder="Alice"></div>
+                            <div class="form-group"><label>Funding ($)</label><input type="number" id="inBuyerFunding" value="500" min="1"></div>
+                            <button class="btn btn-primary" onclick="createBuyer()">+ Add</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sellers -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Sellers <span class="badge badge-count" id="agSellerCount">0</span></span>
+                    </div>
+                    <div class="card-body">
+                        <div class="agent-cards-list" id="agSellerList">
+                            <div class="empty"><div class="empty-icon">&#127981;</div><p>No sellers yet</p></div>
+                        </div>
+                        <hr style="border-color:var(--border);margin:1rem 0">
+                        <div class="form-row">
+                            <div class="form-group"><label>Name</label><input type="text" id="inSellerName" placeholder="DataCorp"></div>
+                            <div class="form-group"><label>Service</label><input type="text" id="inServiceName" placeholder="Data Analysis"></div>
+                            <div class="form-group"><label>Price ($)</label><input type="number" id="inServicePrice" value="50" min="1"></div>
+                            <button class="btn btn-primary" onclick="createSeller()">+ Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Detail (Resonator info) -->
+            <div class="card" style="margin-top:1.5rem">
+                <div class="card-header">
+                    <span class="card-title">Resonator Details</span>
+                    <button class="btn btn-sm btn-ghost" onclick="loadResonators()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Name</th><th>Role</th><th>Resonator</th><th>Presence</th><th>Trades</th><th>LLM</th></tr></thead>
+                            <tbody id="resonatorTable"><tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem">No resonators registered</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================== TRADING TAB =============================== -->
+        <div class="tab-panel" id="panel-trading">
+            <!-- Trade Controls -->
+            <div class="card mb-1">
+                <div class="card-header">
+                    <span class="card-title">Execute Trade</span>
+                </div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Buyer</label>
+                            <select id="tradeBuyer"><option value="">-- Select Buyer --</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Seller</label>
+                            <select id="tradeSeller"><option value="">-- Select Seller --</option></select>
+                        </div>
+                        <button class="btn btn-success" onclick="executeTrade()">Execute Trade</button>
+                        <button class="btn btn-primary" onclick="startAutoTrading()">Auto Trade</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transaction History -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Transaction History <span class="badge badge-count" id="txCount">0</span></span>
+                    <button class="btn btn-sm btn-ghost" onclick="loadTransactions()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Trade ID</th><th>Buyer</th><th>Seller</th><th>Service</th><th>Amount</th><th>Status</th><th>Time</th></tr></thead>
+                            <tbody id="txTable"><tr><td colspan="7" class="text-muted" style="text-align:center;padding:2rem">No transactions yet</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================== LEDGER TAB =============================== -->
+        <div class="tab-panel" id="panel-ledger">
+            <div class="grid-2">
+                <!-- Account Balances -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Account Balances</span>
+                        <button class="btn btn-sm btn-ghost" onclick="loadLedger()">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>Account</th><th>Balance</th></tr></thead>
+                                <tbody id="ledgerAccounts"><tr><td colspan="2" class="text-muted" style="text-align:center;padding:2rem">No accounts</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Entries -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Recent Entries <span class="badge badge-count" id="entryCount">0</span></span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>Type</th><th>Account</th><th>Amount</th><th>Balance After</th><th>Reason</th></tr></thead>
+                                <tbody id="ledgerEntries"><tr><td colspan="5" class="text-muted" style="text-align:center;padding:2rem">No entries</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- IUSD Supply -->
+            <div class="card" style="margin-top:1.5rem">
+                <div class="card-header">
+                    <span class="card-title">IUSD Supply</span>
+                    <button class="btn btn-sm btn-ghost" onclick="loadSupply()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="grid-3" style="margin-bottom:0">
+                        <div class="stat-card">
+                            <div class="stat-label">Total Minted</div>
+                            <div class="stat-value cyan" id="supplyTotal">$0.00</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Remaining Capacity</div>
+                            <div class="stat-value success" id="supplyRemaining">$0.00</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Issuer Receipts</div>
+                            <div class="stat-value primary" id="supplyReceipts">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================== RECEIPTS TAB =============================== -->
+        <div class="tab-panel" id="panel-receipts">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Issuer Receipts</span>
+                    <button class="btn btn-sm btn-ghost" onclick="loadIssuerReceipts()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Receipt ID</th><th>Operation</th><th>Target</th><th>Amount</th><th>Issued At</th></tr></thead>
+                            <tbody id="receiptTable"><tr><td colspan="5" class="text-muted" style="text-align:center;padding:2rem">No receipts yet</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================== ACTIVITY LOG TAB =============================== -->
+        <div class="tab-panel" id="panel-activity">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">System Activity Log</span>
+                    <div class="btn-group">
+                        <div class="filter-group" id="activityFilters">
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="Trade">Trades</button>
+                            <button class="filter-btn" data-filter="AgentLifecycle">Agents</button>
+                            <button class="filter-btn" data-filter="Issuer">Issuer</button>
+                            <button class="filter-btn" data-filter="LLM">LLM</button>
+                        </div>
+                        <button class="btn btn-sm btn-ghost" onclick="loadActivityLog()">Refresh</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Time</th><th>Level</th><th>Category</th><th>Source</th><th>Description</th></tr></thead>
+                            <tbody id="activityTable"><tr><td colspan="5" class="text-muted" style="text-align:center;padding:2rem">No activity yet</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================== SETTINGS TAB =============================== -->
+        <div class="tab-panel" id="panel-settings">
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Maple Runtime</span></div>
+                    <div class="card-body">
+                        <table>
+                            <tbody id="mapleInfo">
+                                <tr><td class="text-muted">Status</td><td id="mapleStatus">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">System Info</span></div>
+                    <div class="card-body">
+                        <table>
+                            <tbody>
+                                <tr><td class="text-muted">Version</td><td id="infoVersion">-</td></tr>
+                                <tr><td class="text-muted">LLM Provider</td><td id="infoLLM">-</td></tr>
+                                <tr><td class="text-muted">LLM Available</td><td id="infoLLMAvail">-</td></tr>
+                                <tr><td class="text-muted">Started At</td><td id="infoStarted">-</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer>
+        <p>Built with Rust &amp; Maple AI Framework | <a href="https://github.com/openibank/openibank" target="_blank">OpeniBank</a></p>
+        <p style="margin-top:0.3rem">AI agents need banks too. This is how they pay each other.</p>
+    </footer>
+
+    <!-- ===== JavaScript ===== -->
+    <script>
+    // ==========================================================================
+    // State
+    // ==========================================================================
+    let agents = [];
+    let eventSource = null;
+    let eventFilter = 'all';
+    let activityFilter = 'all';
+    let statusData = {};
+
+    // ==========================================================================
+    // Init
+    // ==========================================================================
+    document.addEventListener('DOMContentLoaded', () => {
+        setupTabs();
+        setupFilters();
+        connectSSE();
+        loadStatus();
+        loadAgents();
+    });
+
+    // ==========================================================================
+    // Tab Navigation
+    // ==========================================================================
+    function setupTabs() {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+        document.getElementById(`panel-${tab}`).classList.add('active');
+
+        // Load data for tab
+        if (tab === 'trading') loadTransactions();
+        if (tab === 'ledger') { loadLedger(); loadSupply(); }
+        if (tab === 'receipts') loadIssuerReceipts();
+        if (tab === 'activity') loadActivityLog();
+        if (tab === 'agents') loadResonators();
+        if (tab === 'settings') loadSettings();
+    }
+
+    // ==========================================================================
+    // Filter Buttons
+    // ==========================================================================
+    function setupFilters() {
+        document.querySelectorAll('#overviewFilters .filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#overviewFilters .filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                eventFilter = btn.dataset.filter;
+                applyEventFilter();
+            });
+        });
+        document.querySelectorAll('#activityFilters .filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#activityFilters .filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activityFilter = btn.dataset.filter;
+                loadActivityLog();
+            });
+        });
+    }
+
+    function applyEventFilter() {
+        document.querySelectorAll('#eventFeed .ev').forEach(el => {
+            if (eventFilter === 'all') { el.style.display = ''; return; }
+            el.style.display = el.classList.contains(eventFilter) ? '' : 'none';
+        });
+    }
+
+    // ==========================================================================
+    // SSE Connection
+    // ==========================================================================
+    function connectSSE() {
+        if (eventSource) eventSource.close();
+        eventSource = new EventSource('/api/events');
+
+        eventSource.onopen = () => {
+            setDot('dotConnection', 'green');
+            document.getElementById('txtConnection').textContent = 'Connected';
+        };
+
+        eventSource.onerror = () => {
+            setDot('dotConnection', 'red');
+            document.getElementById('txtConnection').textContent = 'Disconnected';
+            setTimeout(connectSSE, 3000);
+        };
+
+        eventSource.addEventListener('state_sync', e => {
+            const d = JSON.parse(e.data);
+            if (d.data) {
+                statusData = d.data;
+                updateOverviewStats();
+            }
         });
 
-        // SSE Connection
-        function connectSSE() {
-            eventSource = new EventSource('/api/events');
+        eventSource.addEventListener('agent_created', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Agent created: ${d.name} (${d.role})`, 'system');
+            loadAgents();
+        });
 
-            eventSource.onopen = () => {
-                document.getElementById('connectionStatus').classList.remove('inactive');
-                document.getElementById('connectionText').textContent = 'Connected';
-            };
+        eventSource.addEventListener('trade_started', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Trade started: ${d.service_name} ($${(d.amount/100).toFixed(2)})`, 'trade');
+        });
 
-            eventSource.onerror = () => {
-                document.getElementById('connectionStatus').classList.add('inactive');
-                document.getElementById('connectionText').textContent = 'Disconnected';
-                setTimeout(connectSSE, 3000);
-            };
+        eventSource.addEventListener('trade_completed', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Trade completed: ${d.service_name} - $${(d.amount/100).toFixed(2)} transferred`, 'trade');
+            loadAgents();
+        });
 
-            eventSource.addEventListener('state_sync', (e) => {
-                const data = JSON.parse(e.data);
-                buyers = data.buyers || [];
-                sellers = data.sellers || [];
-                updateUI();
-                updateStats(data.trade_count, data.total_volume);
-            });
+        eventSource.addEventListener('trade_failed', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Trade failed: ${d.reason}`, 'error');
+        });
 
-            eventSource.addEventListener('agent_created', (e) => {
-                const data = JSON.parse(e.data);
-                addEvent(`🎉 New ${data.agent_type}: ${data.name}`, 'info');
-                refreshAgents();
-            });
+        eventSource.addEventListener('llm_reasoning', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`LLM [${d.agent_name}]: ${d.action}`, 'llm');
+        });
 
-            eventSource.addEventListener('balance_updated', (e) => {
-                const data = JSON.parse(e.data);
-                updateAgentBalance(data.agent_id, data.balance);
-            });
+        eventSource.addEventListener('balance_updated', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Balance: ${d.agent_name} ${d.reason} $${(d.new_balance/100).toFixed(2)}`, 'trade');
+        });
 
-            eventSource.addEventListener('trade_started', (e) => {
-                const data = JSON.parse(e.data);
-                addEvent(`🤝 Trade started: ${data.service} ($${(data.amount/100).toFixed(2)})`, 'trade');
-            });
+        eventSource.addEventListener('issuer_event', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Issuer: ${d.event_type} $${(d.amount/100).toFixed(2)}`, 'system');
+        });
 
-            eventSource.addEventListener('llm_reasoning', (e) => {
-                const data = JSON.parse(e.data);
-                addEvent(`🧠 ${data.reasoning} → ${data.decision}`, 'reasoning');
-            });
+        eventSource.addEventListener('receipt_generated', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Receipt: ${d.receipt_type} by ${d.actor}`, 'system');
+        });
 
-            eventSource.addEventListener('trade_completed', (e) => {
-                const data = JSON.parse(e.data);
-                addEvent(`✅ Trade completed! $${(data.amount/100).toFixed(2)} transferred`, 'trade');
-                refreshAgents();
-            });
+        eventSource.addEventListener('escrow_event', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Escrow: ${d.state} $${(d.amount/100).toFixed(2)}`, 'escrow');
+        });
 
-            eventSource.addEventListener('trade_failed', (e) => {
-                const data = JSON.parse(e.data);
-                addEvent(`❌ Trade failed: ${data.reason}`, 'error');
-            });
-        }
+        eventSource.addEventListener('maple_runtime', e => {
+            const d = JSON.parse(e.data);
+            addEvent(`Maple: ${d.description}`, 'maple');
+            setDot('dotMaple', 'green');
+        });
 
-        // Check status
-        async function checkStatus() {
-            try {
-                const res = await fetch('/api/status');
-                const data = await res.json();
+        eventSource.addEventListener('system_reset', () => {
+            addEvent('System reset', 'system');
+            agents = [];
+            renderAllAgents();
+            updateOverviewStats();
+        });
+    }
 
-                if (data.llm_available) {
-                    document.getElementById('llmStatus').classList.remove('inactive');
-                    document.getElementById('llmText').textContent = `LLM: ${data.llm_provider || 'Active'} ✓`;
-                } else {
-                    document.getElementById('llmStatus').classList.add('inactive');
-                    document.getElementById('llmText').textContent = 'LLM: Deterministic mode';
-                }
-            } catch (e) {
-                console.error('Status check failed:', e);
-            }
-        }
+    // ==========================================================================
+    // API Calls
+    // ==========================================================================
+    async function loadStatus() {
+        try {
+            const res = await fetch('/api/status');
+            statusData = await res.json();
+            updateOverviewStats();
 
-        // Refresh agents
-        async function refreshAgents() {
-            try {
-                const res = await fetch('/api/agents');
-                const data = await res.json();
-                buyers = data.buyers || [];
-                sellers = data.sellers || [];
-                updateStats(data.trade_count, data.total_volume);
-                updateUI();
-            } catch (e) {
-                console.error('Failed to refresh agents:', e);
-            }
-        }
+            document.getElementById('sysVersion').textContent = statusData.version || '0.1.0';
 
-        // Update UI
-        function updateUI() {
-            // Update buyer list
-            const buyerList = document.getElementById('buyerList');
-            document.getElementById('buyerCount').textContent = buyers.length;
-
-            if (buyers.length === 0) {
-                buyerList.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🤖</div>
-                        <p>No buyers yet. Create one below!</p>
-                    </div>
-                `;
+            if (statusData.llm_available) {
+                setDot('dotLLM', 'green');
+                document.getElementById('txtLLM').textContent = `LLM: ${statusData.llm_provider || 'Active'}`;
             } else {
-                buyerList.innerHTML = buyers.map(b => `
-                    <div class="agent-item" data-id="${b.id}">
-                        <div class="agent-info">
-                            <h4>${b.name}</h4>
-                            <p>${b.id}</p>
-                        </div>
-                        <div class="agent-balance">$${(b.balance/100).toFixed(2)}</div>
-                    </div>
-                `).join('');
+                setDot('dotLLM', 'yellow');
+                document.getElementById('txtLLM').textContent = 'LLM: Deterministic';
             }
 
-            // Update seller list
-            const sellerList = document.getElementById('sellerList');
-            document.getElementById('sellerCount').textContent = sellers.length;
+            if (statusData.maple_runtime) {
+                setDot('dotMaple', 'green');
+                document.getElementById('txtMaple').textContent = `Maple: ${statusData.maple_runtime.instance_name || 'Active'}`;
+            }
+        } catch (e) { console.error('loadStatus:', e); }
+    }
 
-            if (sellers.length === 0) {
-                sellerList.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🏭</div>
-                        <p>No sellers yet. Create one below!</p>
-                    </div>
-                `;
+    async function loadAgents() {
+        try {
+            const res = await fetch('/api/agents');
+            const data = await res.json();
+            agents = data.agents || [];
+            renderAllAgents();
+            updateOverviewStats();
+        } catch (e) { console.error('loadAgents:', e); }
+    }
+
+    async function loadTransactions() {
+        try {
+            const res = await fetch('/api/transactions');
+            const data = await res.json();
+            const txs = data.transactions || [];
+            document.getElementById('txCount').textContent = txs.length;
+
+            const tbody = document.getElementById('txTable');
+            if (txs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:2rem">No transactions yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = txs.map(tx => `<tr>
+                <td class="mono">${tx.tx_id.substring(0,14)}...</td>
+                <td>${tx.buyer_id}</td>
+                <td>${tx.seller_id}</td>
+                <td>${tx.service_name}</td>
+                <td class="fw-bold text-success">$${(tx.amount/100).toFixed(2)}</td>
+                <td><span class="badge badge-success">${tx.status}</span></td>
+                <td class="text-muted">${fmtTime(tx.timestamp)}</td>
+            </tr>`).join('');
+        } catch (e) { console.error('loadTransactions:', e); }
+    }
+
+    async function loadLedger() {
+        try {
+            const res = await fetch('/api/ledger/accounts');
+            const data = await res.json();
+
+            // Accounts
+            const accts = data.accounts || [];
+            const acctBody = document.getElementById('ledgerAccounts');
+            if (accts.length === 0) {
+                acctBody.innerHTML = '<tr><td colspan="2" class="text-muted" style="text-align:center;padding:2rem">No accounts</td></tr>';
             } else {
-                sellerList.innerHTML = sellers.map(s => `
-                    <div class="agent-item" data-id="${s.id}">
-                        <div class="agent-info">
-                            <h4>${s.name}</h4>
-                            <p>${s.service} @ $${(s.price/100).toFixed(2)}</p>
-                        </div>
-                        <div class="agent-balance">$${(s.balance/100).toFixed(2)}</div>
-                    </div>
-                `).join('');
+                acctBody.innerHTML = accts.map(a => `<tr>
+                    <td class="mono">${a.account_id}</td>
+                    <td class="fw-bold text-success">${a.balance_display}</td>
+                </tr>`).join('');
             }
 
-            // Update active agents count
-            document.getElementById('activeAgents').textContent = buyers.length + sellers.length;
-
-            // Update trade selectors
-            const buyerSelect = document.getElementById('tradeBuyer');
-            buyerSelect.innerHTML = '<option value="">-- Select Buyer --</option>' +
-                buyers.map(b => `<option value="${b.id}">${b.name} ($${(b.balance/100).toFixed(2)})</option>`).join('');
-
-            const sellerSelect = document.getElementById('tradeSeller');
-            sellerSelect.innerHTML = '<option value="">-- Select Seller --</option>' +
-                sellers.map(s => `<option value="${s.id}">${s.name} - ${s.service} ($${(s.price/100).toFixed(2)})</option>`).join('');
-        }
-
-        function updateAgentBalance(agentId, balance) {
-            const item = document.querySelector(`.agent-item[data-id="${agentId}"]`);
-            if (item) {
-                const balanceEl = item.querySelector('.agent-balance');
-                balanceEl.textContent = `$${(balance/100).toFixed(2)}`;
-                balanceEl.style.color = '#22c55e';
-                setTimeout(() => balanceEl.style.color = '', 500);
+            // Entries
+            document.getElementById('entryCount').textContent = data.total_entries || 0;
+            const entries = data.recent_entries || [];
+            const entryBody = document.getElementById('ledgerEntries');
+            if (entries.length === 0) {
+                entryBody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:2rem">No entries</td></tr>';
+            } else {
+                entryBody.innerHTML = entries.map(e => `<tr>
+                    <td><span class="badge ${e.entry_type==='Credit'?'badge-success':'badge-warning'}">${e.entry_type}</span></td>
+                    <td class="mono">${e.account}</td>
+                    <td class="fw-bold">${e.amount_display}</td>
+                    <td>$${(e.balance_after/100).toFixed(2)}</td>
+                    <td class="text-muted">${e.reason}</td>
+                </tr>`).join('');
             }
-        }
+        } catch (e) { console.error('loadLedger:', e); }
+    }
 
-        function updateStats(trades, volume) {
-            document.getElementById('totalTrades').textContent = trades || 0;
-            document.getElementById('totalVolume').textContent = `$${((volume || 0)/100).toFixed(2)}`;
-        }
+    async function loadSupply() {
+        try {
+            const res = await fetch('/api/issuer/supply');
+            const data = await res.json();
+            document.getElementById('supplyTotal').textContent = data.total_display || '$0.00';
+            document.getElementById('supplyRemaining').textContent = data.remaining_display || '$0.00';
+            document.getElementById('supplyReceipts').textContent = data.receipt_count || 0;
+            document.getElementById('statSupply').textContent = data.total_display || '$0.00';
+            document.getElementById('statRemaining').textContent = data.remaining_display || '$0.00';
+        } catch (e) { console.error('loadSupply:', e); }
+    }
 
-        // Create buyer
-        async function createBuyer() {
-            const name = document.getElementById('buyerName').value.trim();
-            const funding = parseInt(document.getElementById('buyerFunding').value) * 100;
-
-            if (!name) {
-                alert('Please enter a buyer name');
+    async function loadIssuerReceipts() {
+        try {
+            const res = await fetch('/api/issuer/receipts');
+            const data = await res.json();
+            const recs = data.receipts || [];
+            const tbody = document.getElementById('receiptTable');
+            if (recs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:2rem">No receipts yet</td></tr>';
                 return;
             }
+            tbody.innerHTML = recs.map(r => `<tr>
+                <td class="mono">${r.receipt_id.substring(0,16)}...</td>
+                <td><span class="badge ${r.operation==='Mint'?'badge-success':'badge-warning'}">${r.operation}</span></td>
+                <td class="mono">${r.target}</td>
+                <td class="fw-bold text-success">${r.amount_display}</td>
+                <td class="text-muted">${fmtTime(r.issued_at)}</td>
+            </tr>`).join('');
+        } catch (e) { console.error('loadIssuerReceipts:', e); }
+    }
 
-            try {
-                const res = await fetch('/api/agents/buyer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, funding })
-                });
-
-                if (!res.ok) throw new Error('Failed to create buyer');
-
-                document.getElementById('buyerName').value = '';
-                await refreshAgents();
-            } catch (e) {
-                addEvent(`Error: ${e.message}`, 'error');
-            }
-        }
-
-        // Create seller
-        async function createSeller() {
-            const name = document.getElementById('sellerName').value.trim();
-            const serviceName = document.getElementById('serviceName').value.trim();
-            const price = parseInt(document.getElementById('servicePrice').value) * 100;
-
-            if (!name || !serviceName) {
-                alert('Please enter seller and service names');
+    async function loadResonators() {
+        try {
+            const res = await fetch('/api/resonators');
+            const data = await res.json();
+            const resonators = data.resonators || [];
+            const tbody = document.getElementById('resonatorTable');
+            if (resonators.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem">No resonators</td></tr>';
                 return;
             }
+            tbody.innerHTML = resonators.map(r => `<tr>
+                <td class="fw-bold">${r.name}</td>
+                <td><span class="badge badge-primary">${fmt(r.role)}</span></td>
+                <td>${r.has_resonator_handle ? '<span class="text-success">Active</span>' : '<span class="text-muted">None</span>'}</td>
+                <td><span class="badge badge-cyan">${fmt(r.presence)}</span></td>
+                <td>${r.trade_count}</td>
+                <td class="text-muted">${r.llm_model || 'deterministic'}</td>
+            </tr>`).join('');
+        } catch (e) { console.error('loadResonators:', e); }
+    }
 
-            try {
-                const res = await fetch('/api/agents/seller', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, service_name: serviceName, price })
-                });
-
-                if (!res.ok) throw new Error('Failed to create seller');
-
-                document.getElementById('sellerName').value = '';
-                document.getElementById('serviceName').value = '';
-                await refreshAgents();
-            } catch (e) {
-                addEvent(`Error: ${e.message}`, 'error');
+    async function loadActivityLog() {
+        try {
+            const res = await fetch('/api/system/log');
+            const data = await res.json();
+            let entries = data.entries || [];
+            if (activityFilter !== 'all') {
+                entries = entries.filter(e => e.category === activityFilter);
             }
-        }
-
-        // Execute trade
-        async function executeTrade() {
-            const buyerId = document.getElementById('tradeBuyer').value;
-            const sellerId = document.getElementById('tradeSeller').value;
-
-            if (!buyerId || !sellerId) {
-                alert('Please select both a buyer and seller');
+            const tbody = document.getElementById('activityTable');
+            if (entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:2rem">No activity</td></tr>';
                 return;
             }
+            tbody.innerHTML = entries.slice(0, 100).map(e => `<tr>
+                <td class="text-muted mono" style="font-size:0.75rem">${fmtTime(e.timestamp)}</td>
+                <td><span class="badge ${levelBadge(e.level)}">${e.level}</span></td>
+                <td><span class="badge badge-primary">${e.category}</span></td>
+                <td class="mono">${e.source}</td>
+                <td>${e.description}</td>
+            </tr>`).join('');
+        } catch (e) { console.error('loadActivityLog:', e); }
+    }
 
-            try {
-                const res = await fetch('/api/trade', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ buyer_id: buyerId, seller_id: sellerId })
-                });
+    async function loadSettings() {
+        try {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+            document.getElementById('infoVersion').textContent = data.version || '-';
+            document.getElementById('infoLLM').textContent = data.llm_provider || 'none';
+            document.getElementById('infoLLMAvail').textContent = data.llm_available ? 'Yes' : 'No';
+            document.getElementById('infoStarted').textContent = data.started_at ? fmtTime(data.started_at) : '-';
 
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(data.message || 'Trade failed');
-                }
-
-                await refreshAgents();
-            } catch (e) {
-                addEvent(`Trade error: ${e.message}`, 'error');
+            if (data.maple_runtime) {
+                const mr = data.maple_runtime;
+                document.getElementById('mapleInfo').innerHTML = `
+                    <tr><td class="text-muted">Instance</td><td>${mr.instance_name || '-'}</td></tr>
+                    <tr><td class="text-muted">Resonators</td><td>${mr.resonator_count || 0}</td></tr>
+                    <tr><td class="text-muted">Active Couplings</td><td>${mr.active_couplings || 0}</td></tr>
+                    <tr><td class="text-muted">Invariants Active</td><td>${mr.invariants_active || 0}</td></tr>
+                    <tr><td class="text-muted">Uptime</td><td>${mr.uptime_seconds || 0}s</td></tr>
+                `;
+                document.getElementById('mapleStatus').textContent = 'Active';
             }
+        } catch (e) { console.error('loadSettings:', e); }
+    }
+
+    // ==========================================================================
+    // Agent CRUD
+    // ==========================================================================
+    async function createBuyer() {
+        const name = document.getElementById('inBuyerName').value.trim();
+        const funding = parseInt(document.getElementById('inBuyerFunding').value) * 100;
+        if (!name) return alert('Enter a buyer name');
+
+        try {
+            const res = await fetch('/api/agents/buyer', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name, funding })
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+            document.getElementById('inBuyerName').value = '';
+            loadAgents();
+        } catch (e) { addEvent(`Error creating buyer: ${e.message}`, 'error'); }
+    }
+
+    async function createSeller() {
+        const name = document.getElementById('inSellerName').value.trim();
+        const svcName = document.getElementById('inServiceName').value.trim();
+        const price = parseInt(document.getElementById('inServicePrice').value) * 100;
+        if (!name || !svcName) return alert('Enter seller and service names');
+
+        try {
+            const res = await fetch('/api/agents/seller', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name, service_name: svcName, price })
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+            document.getElementById('inSellerName').value = '';
+            document.getElementById('inServiceName').value = '';
+            loadAgents();
+        } catch (e) { addEvent(`Error creating seller: ${e.message}`, 'error'); }
+    }
+
+    // ==========================================================================
+    // Trading
+    // ==========================================================================
+    async function executeTrade() {
+        const buyerId = document.getElementById('tradeBuyer').value;
+        const sellerId = document.getElementById('tradeSeller').value;
+        if (!buyerId || !sellerId) return alert('Select both buyer and seller');
+
+        try {
+            const res = await fetch('/api/trade', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ buyer_id: buyerId, seller_id: sellerId })
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Trade failed'); }
+            loadAgents();
+            loadTransactions();
+        } catch (e) { addEvent(`Trade error: ${e.message}`, 'error'); }
+    }
+
+    async function startAutoTrading() {
+        const buyerCount = agents.filter(a => a.role === 'Buyer').length;
+        const sellerCount = agents.filter(a => a.role === 'Seller').length;
+        if (buyerCount === 0 || sellerCount === 0) return alert('Need at least one buyer and one seller');
+
+        try {
+            await fetch('/api/trade/auto', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ rounds: 10, delay_ms: 1000 })
+            });
+            addEvent('Auto trading started (10 rounds)', 'system');
+        } catch (e) { addEvent(`Error: ${e.message}`, 'error'); }
+    }
+
+    async function runSimulation() {
+        const buyers = parseInt(document.getElementById('simBuyers').value) || 3;
+        const sellers = parseInt(document.getElementById('simSellers').value) || 2;
+        const rounds = parseInt(document.getElementById('simRounds').value) || 10;
+        const delay_ms = parseInt(document.getElementById('simDelay').value) || 500;
+
+        try {
+            const res = await fetch('/api/simulate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ buyers, sellers, rounds, delay_ms })
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+            addEvent(`Simulation started: ${buyers} buyers, ${sellers} sellers, ${rounds} rounds`, 'system');
+        } catch (e) { addEvent(`Simulation error: ${e.message}`, 'error'); }
+    }
+
+    async function resetPlayground() {
+        if (!confirm('Reset all agents, trades, and state?')) return;
+        try {
+            await fetch('/api/reset', { method: 'POST' });
+            agents = [];
+            renderAllAgents();
+            updateOverviewStats();
+            addEvent('Playground reset', 'system');
+        } catch (e) { addEvent(`Reset error: ${e.message}`, 'error'); }
+    }
+
+    // ==========================================================================
+    // UI Rendering
+    // ==========================================================================
+    function renderAllAgents() {
+        const buyers = agents.filter(a => a.role === 'Buyer');
+        const sellers = agents.filter(a => a.role === 'Seller');
+
+        // Overview
+        const overview = document.getElementById('overviewAgentList');
+        if (agents.length === 0) {
+            overview.innerHTML = '<div class="empty"><div class="empty-icon">&#129302;</div><p>No agents yet. Create agents in the Trading tab or run a simulation.</p></div>';
+        } else {
+            overview.innerHTML = agents.map(a => agentCardHTML(a)).join('');
         }
 
-        // Auto trading
-        async function startAutoTrading() {
-            if (buyers.length === 0 || sellers.length === 0) {
-                alert('Need at least one buyer and one seller');
-                return;
-            }
+        // Agents tab
+        document.getElementById('agBuyerCount').textContent = buyers.length;
+        document.getElementById('agSellerCount').textContent = sellers.length;
 
-            try {
-                await fetch('/api/trade/auto', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rounds: 10, delay_ms: 1000 })
-                });
-                addEvent('🔄 Started auto trading (10 rounds)', 'info');
-            } catch (e) {
-                addEvent(`Error: ${e.message}`, 'error');
-            }
+        const buyerList = document.getElementById('agBuyerList');
+        if (buyers.length === 0) {
+            buyerList.innerHTML = '<div class="empty"><div class="empty-icon">&#128722;</div><p>No buyers yet</p></div>';
+        } else {
+            buyerList.innerHTML = buyers.map(a => agentCardHTML(a)).join('');
         }
 
-        // Reset playground
-        async function resetPlayground() {
-            if (!confirm('Reset all agents and trades?')) return;
-
-            try {
-                await fetch('/api/reset', { method: 'POST' });
-                buyers = [];
-                sellers = [];
-                updateUI();
-                updateStats(0, 0);
-                clearEvents();
-                addEvent('🗑️ Playground reset', 'info');
-            } catch (e) {
-                addEvent(`Error: ${e.message}`, 'error');
-            }
+        const sellerList = document.getElementById('agSellerList');
+        if (sellers.length === 0) {
+            sellerList.innerHTML = '<div class="empty"><div class="empty-icon">&#127981;</div><p>No sellers yet</p></div>';
+        } else {
+            sellerList.innerHTML = sellers.map(a => agentCardHTML(a)).join('');
         }
 
-        // Event feed
-        function addEvent(message, type = 'info') {
-            const feed = document.getElementById('eventFeed');
-            const time = new Date().toLocaleTimeString();
+        // Update stats
+        document.getElementById('statAgents').textContent = agents.length;
+        document.getElementById('statBuyers').textContent = buyers.length;
+        document.getElementById('statSellers').textContent = sellers.length;
 
-            // Remove empty state if present
-            const emptyState = feed.querySelector('.empty-state');
-            if (emptyState) emptyState.remove();
+        // Trade selectors
+        const buyerSel = document.getElementById('tradeBuyer');
+        buyerSel.innerHTML = '<option value="">-- Select Buyer --</option>' +
+            buyers.map(b => `<option value="${b.id}">${b.name} ($${(b.balance/100).toFixed(2)})</option>`).join('');
 
-            const item = document.createElement('div');
-            item.className = `event-item ${type}`;
-            item.innerHTML = `
-                <span class="event-time">${time}</span>
-                <span>${message}</span>
-            `;
+        const sellerSel = document.getElementById('tradeSeller');
+        sellerSel.innerHTML = '<option value="">-- Select Seller --</option>' +
+            sellers.map(s => `<option value="${s.id}">${s.name} - ${(s.services||[])[0]?.name||'?'} ($${((s.services||[])[0]?.price||0)/100})</option>`).join('');
+    }
 
-            feed.insertBefore(item, feed.firstChild);
+    function agentCardHTML(a) {
+        const svc = (a.services && a.services[0]) ? `${a.services[0].name} @ $${(a.services[0].price/100).toFixed(2)}` : '';
+        const roleBadge = a.role === 'Buyer' ? 'badge-primary' : a.role === 'Seller' ? 'badge-success' : 'badge-warning';
+        const resonator = a.has_resonator ? '<span class="badge badge-purple" style="margin-left:0.3rem">Resonator</span>' : '';
+        return `<div class="agent-card">
+            <div>
+                <div class="agent-name">${a.name} <span class="badge ${roleBadge}">${a.role}</span>${resonator}</div>
+                <div class="agent-meta">${a.id}${svc ? ' &middot; ' + svc : ''} &middot; ${a.trade_count || 0} trades</div>
+            </div>
+            <div class="agent-balance">$${((a.balance||0)/100).toFixed(2)}</div>
+        </div>`;
+    }
 
-            // Keep only last 50 events
-            while (feed.children.length > 50) {
-                feed.removeChild(feed.lastChild);
-            }
+    function updateOverviewStats() {
+        if (statusData.trading) {
+            document.getElementById('statTrades').textContent = statusData.trading.trade_count || 0;
+            document.getElementById('statVolume').textContent = statusData.trading.total_volume_display || '$0.00';
         }
-
-        function clearEvents() {
-            document.getElementById('eventFeed').innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📻</div>
-                    <p>Waiting for events...</p>
-                </div>
-            `;
+        if (statusData.issuer) {
+            document.getElementById('statSupply').textContent = statusData.issuer.total_supply_display || '$0.00';
+            document.getElementById('statRemaining').textContent = `Remaining: ${statusData.issuer.remaining_supply_display || '$0.00'}`;
         }
+        if (statusData.agents) {
+            document.getElementById('statAgents').textContent = statusData.agents.total || 0;
+            document.getElementById('statBuyers').textContent = statusData.agents.buyers || 0;
+            document.getElementById('statSellers').textContent = statusData.agents.sellers || 0;
+        }
+        if (statusData.uptime_seconds) {
+            document.getElementById('txtUptime').textContent = fmtDuration(statusData.uptime_seconds);
+        }
+    }
+
+    // ==========================================================================
+    // Event Feed
+    // ==========================================================================
+    function addEvent(message, type = 'system') {
+        const feed = document.getElementById('eventFeed');
+        const empty = feed.querySelector('.empty');
+        if (empty) empty.remove();
+
+        const el = document.createElement('div');
+        el.className = `ev ${type}`;
+        el.innerHTML = `<span class="ev-time">${new Date().toLocaleTimeString()}</span><span class="ev-msg">${message}</span>`;
+        feed.insertBefore(el, feed.firstChild);
+
+        while (feed.children.length > 100) feed.removeChild(feed.lastChild);
+        applyEventFilter();
+    }
+
+    function clearEvents() {
+        document.getElementById('eventFeed').innerHTML = '<div class="empty"><div class="empty-icon">&#128225;</div><p>Waiting for events...</p></div>';
+    }
+
+    // ==========================================================================
+    // Helpers
+    // ==========================================================================
+    function setDot(id, color) {
+        const el = document.getElementById(id);
+        el.className = 'dot';
+        if (color) el.classList.add(color);
+    }
+
+    function fmtTime(ts) {
+        if (!ts) return '-';
+        const d = new Date(ts);
+        return d.toLocaleTimeString();
+    }
+
+    function fmtDuration(secs) {
+        if (secs < 60) return `${secs}s`;
+        if (secs < 3600) return `${Math.floor(secs/60)}m ${secs%60}s`;
+        return `${Math.floor(secs/3600)}h ${Math.floor((secs%3600)/60)}m`;
+    }
+
+    function fmt(val) {
+        if (typeof val === 'string') return val;
+        if (typeof val === 'object') return JSON.stringify(val);
+        return String(val);
+    }
+
+    function levelBadge(level) {
+        switch(level) {
+            case 'Error': case 'Critical': return 'badge-danger';
+            case 'Warning': return 'badge-warning';
+            case 'Debug': return 'badge-purple';
+            default: return 'badge-primary';
+        }
+    }
+
+    // Auto-refresh every 5 seconds
+    setInterval(() => {
+        loadStatus();
+        loadAgents();
+    }, 5000);
     </script>
 </body>
 </html>

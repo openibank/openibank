@@ -1,0 +1,33 @@
+[package]
+name = "openibank-ual"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "UAL (Universal Agent Language) integration for OpeniBank banking commands"
+
+[dependencies]
+# UAL (Maple)
+ual-types = { path = "../../../maple/crates/ual-types" }
+ual-parser = { path = "../../../maple/crates/ual-parser" }
+ual-compiler = { path = "../../../maple/crates/ual-compiler" }
+
+# Maple core
+rcf-types = { workspace = true }
+rcf-commitment = { workspace = true }
+aas-types = { workspace = true }
+
+# OpeniBank
+openibank-core = { workspace = true }
+openibank-maple = { workspace = true }
+
+# Shared deps
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

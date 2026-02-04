@@ -1,34 +1,33 @@
 //! OpeniBank CLI - Command-line interface for AI Agent Banking
 //!
-//! A powerful CLI for interacting with OpeniBank services:
-//! - Demo: Run viral demos showcasing agent commerce
-//! - Wallet: Manage agent wallets
-//! - Issuer: Interact with the IUSD issuer
-//! - Agent: Run AI agents with LLM support
+//! When the Playground is running (default: http://localhost:8080), the CLI
+//! routes commands through its API so state is unified. Otherwise, falls back
+//! to local in-memory mode.
 //!
 //! # Quick Start
 //!
 //! ```bash
-//! # Run the viral demo
-//! openibank demo
+//! # Start Playground first (in one terminal)
+//! cargo run -p openibank-playground
 //!
-//! # Start the issuer service
-//! openibank issuer start
-//!
-//! # Create a new wallet
-//! openibank wallet create --name my-agent
-//!
-//! # Run an agent with Ollama
-//! openibank agent run --llm ollama --model llama3
+//! # Then use CLI (auto-detects Playground)
+//! openibank agent buyer -n Alice --funding 50000
+//! openibank agent seller -n DataCorp --service "Data Analysis" --price 10000
+//! openibank agent marketplace --buyers 3 --sellers 2
+//! openibank status
 //! ```
 
 use clap::{Parser, Subcommand};
 use colored::*;
 
+mod client;
 mod commands;
 mod display;
 
+use client::PlaygroundClient;
 use commands::{demo, issuer, wallet, agent, receipt};
+
+const DEFAULT_PLAYGROUND_URL: &str = "http://localhost:8080";
 
 /// OpeniBank CLI - Programmable Wallets + Receipts for AI Agents
 #[derive(Parser)]
@@ -38,6 +37,14 @@ use commands::{demo, issuer, wallet, agent, receipt};
 #[command(about = "AI-agent-only banking with programmable wallets and verifiable receipts", long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
+    /// Playground server URL (auto-detected if running on default port)
+    #[arg(long, global = true, default_value = DEFAULT_PLAYGROUND_URL)]
+    server: String,
+
+    /// Force local mode (skip Playground detection)
+    #[arg(long, global = true)]
+    local: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -262,6 +269,10 @@ enum AgentCommands {
         #[arg(long, default_value = "2")]
         sellers: u32,
 
+        /// Number of trading rounds
+        #[arg(long, default_value = "10")]
+        rounds: u32,
+
         /// LLM provider
         #[arg(long)]
         llm: Option<String>,
@@ -302,7 +313,27 @@ async fn main() -> anyhow::Result<()> {
     // Print banner for all commands
     print_banner();
 
+    // Try to connect to Playground (unless --local is set)
+    let playground = if cli.local {
+        None
+    } else {
+        let client = PlaygroundClient::new(&cli.server);
+        if client.is_available().await {
+            println!("  {} Connected to Playground at {}", "●".bright_green(), cli.server.bright_cyan());
+            println!();
+            Some(client)
+        } else {
+            if cli.server != DEFAULT_PLAYGROUND_URL {
+                println!("  {} Could not connect to Playground at {}", "○".yellow(), cli.server);
+            }
+            println!("  {} Running in local mode", "ℹ".bright_cyan());
+            println!();
+            None
+        }
+    };
+
     match cli.command {
+        // ===== Demo commands always run locally =====
         Commands::Demo { demo_type } => match demo_type {
             DemoCommands::Full { llm, model, verbose } => {
                 demo::run_full_demo(llm, model, verbose).await?;
@@ -315,51 +346,183 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Wallet { action } => match action {
-            WalletCommands::Create { name, funding, budget } => {
-                wallet::create_wallet(&name, funding, budget).await?;
-            }
-            WalletCommands::Info { name } => {
-                wallet::show_wallet_info(&name).await?;
-            }
-            WalletCommands::List => {
-                wallet::list_wallets().await?;
-            }
-            WalletCommands::Transfer { from, to, amount, purpose } => {
-                wallet::transfer(&from, &to, amount, &purpose).await?;
+        // ===== Wallet commands =====
+        Commands::Wallet { action } => {
+            if let Some(ref pg) = playground {
+                // Route wallet list through playground
+                match action {
+                    WalletCommands::List => {
+                        client::display_agents(pg).await?;
+                    }
+                    WalletCommands::Info { name } => {
+                        let id = format!("res_{}", name.to_lowercase().replace(' ', "_"));
+                        let info = pg.get_agent(&id).await?;
+                        println!("{}", serde_json::to_string_pretty(&info)?);
+                    }
+                    _ => {
+                        // Create/Transfer still go local
+                        match action {
+                            WalletCommands::Create { name, funding, budget } => {
+                                wallet::create_wallet(&name, funding, budget).await?;
+                            }
+                            WalletCommands::Transfer { from, to, amount, purpose } => {
+                                wallet::transfer(&from, &to, amount, &purpose).await?;
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+            } else {
+                match action {
+                    WalletCommands::Create { name, funding, budget } => {
+                        wallet::create_wallet(&name, funding, budget).await?;
+                    }
+                    WalletCommands::Info { name } => {
+                        wallet::show_wallet_info(&name).await?;
+                    }
+                    WalletCommands::List => {
+                        wallet::list_wallets().await?;
+                    }
+                    WalletCommands::Transfer { from, to, amount, purpose } => {
+                        wallet::transfer(&from, &to, amount, &purpose).await?;
+                    }
+                }
             }
         },
 
-        Commands::Issuer { action } => match action {
-            IssuerCommands::Start { port, reserve_cap } => {
-                issuer::start_issuer(port, reserve_cap).await?;
-            }
-            IssuerCommands::Init { url, reserve_cap } => {
-                issuer::init_issuer(&url, reserve_cap).await?;
-            }
-            IssuerCommands::Mint { to, amount, reason, url } => {
-                issuer::mint(&url, &to, amount, &reason).await?;
-            }
-            IssuerCommands::Supply { url } => {
-                issuer::show_supply(&url).await?;
-            }
-            IssuerCommands::Receipts { limit, url } => {
-                issuer::show_receipts(&url, limit).await?;
+        // ===== Issuer commands =====
+        Commands::Issuer { action } => {
+            if let Some(ref pg) = playground {
+                match action {
+                    IssuerCommands::Supply { .. } => {
+                        let supply = pg.get_supply().await?;
+                        let total = supply.get("total_display").and_then(|v| v.as_str()).unwrap_or("$0.00");
+                        let remaining = supply.get("remaining_display").and_then(|v| v.as_str()).unwrap_or("$0.00");
+                        let receipts = supply.get("receipt_count").and_then(|v| v.as_u64()).unwrap_or(0);
+
+                        println!("{}", "IUSD Supply (from Playground)".bright_white().bold());
+                        println!("{}", "─".repeat(40));
+                        println!("  Total Supply:     {}", total.bright_cyan());
+                        println!("  Remaining:        {}", remaining.bright_green());
+                        println!("  Issuer Receipts:  {}", receipts);
+                    }
+                    IssuerCommands::Receipts { .. } => {
+                        let data = pg.get_issuer_receipts().await?;
+                        let receipts = data.get("receipts").and_then(|v| v.as_array());
+                        println!("{}", "Issuer Receipts (from Playground)".bright_white().bold());
+                        println!("{}", "─".repeat(60));
+                        if let Some(recs) = receipts {
+                            for r in recs {
+                                let op = r.get("operation").and_then(|v| v.as_str()).unwrap_or("?");
+                                let target = r.get("target").and_then(|v| v.as_str()).unwrap_or("?");
+                                let amount = r.get("amount_display").and_then(|v| v.as_str()).unwrap_or("$0");
+                                let time = r.get("issued_at").and_then(|v| v.as_str()).unwrap_or("?");
+                                let op_color = if op == "Mint" { op.bright_green() } else { op.bright_yellow() };
+                                println!("  {} {:8}  {:>10}  {}  {}", "●".bright_cyan(), op_color, amount.bright_white(), target, time.bright_black());
+                            }
+                        } else {
+                            println!("  {}", "No receipts yet".yellow());
+                        }
+                    }
+                    _ => {
+                        // Start/Init/Mint fall through to local
+                        match action {
+                            IssuerCommands::Start { port, reserve_cap } => {
+                                issuer::start_issuer(port, reserve_cap).await?;
+                            }
+                            IssuerCommands::Init { url, reserve_cap } => {
+                                issuer::init_issuer(&url, reserve_cap).await?;
+                            }
+                            IssuerCommands::Mint { to, amount, reason, url } => {
+                                issuer::mint(&url, &to, amount, &reason).await?;
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+            } else {
+                match action {
+                    IssuerCommands::Start { port, reserve_cap } => {
+                        issuer::start_issuer(port, reserve_cap).await?;
+                    }
+                    IssuerCommands::Init { url, reserve_cap } => {
+                        issuer::init_issuer(&url, reserve_cap).await?;
+                    }
+                    IssuerCommands::Mint { to, amount, reason, url } => {
+                        issuer::mint(&url, &to, amount, &reason).await?;
+                    }
+                    IssuerCommands::Supply { url } => {
+                        issuer::show_supply(&url).await?;
+                    }
+                    IssuerCommands::Receipts { limit, url } => {
+                        issuer::show_receipts(&url, limit).await?;
+                    }
+                }
             }
         },
 
-        Commands::Agent { action } => match action {
-            AgentCommands::Buyer { name, llm, model, funding } => {
-                agent::run_buyer(&name, llm, &model, funding).await?;
-            }
-            AgentCommands::Seller { name, service, price } => {
-                agent::run_seller(&name, &service, price).await?;
-            }
-            AgentCommands::Marketplace { buyers, sellers, llm } => {
-                agent::run_marketplace(buyers, sellers, llm).await?;
+        // ===== Agent commands — prefer Playground =====
+        Commands::Agent { action } => {
+            if let Some(ref pg) = playground {
+                match action {
+                    AgentCommands::Buyer { name, funding, .. } => {
+                        println!("{}", "Creating buyer agent via Playground...".bright_white());
+                        let result = pg.create_buyer(&name, funding).await?;
+                        let agent = result.get("agent");
+                        if let Some(a) = agent {
+                            let id = a.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+                            let bal = a.get("balance").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let has_res = a.get("has_resonator").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let resonator_str = if has_res { " (Maple Resonator)" } else { "" };
+                            display::success(&format!(
+                                "Buyer '{}' created with ${:.2}{}",
+                                name, bal as f64 / 100.0, resonator_str
+                            ));
+                            display::info(&format!("ID: {}", id));
+                            display::info("Agent is now visible in the web dashboard");
+                        }
+                    }
+                    AgentCommands::Seller { name, service, price } => {
+                        println!("{}", "Creating seller agent via Playground...".bright_white());
+                        let result = pg.create_seller(&name, &service, price).await?;
+                        let agent = result.get("agent");
+                        if let Some(a) = agent {
+                            let id = a.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+                            let has_res = a.get("has_resonator").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let resonator_str = if has_res { " (Maple Resonator)" } else { "" };
+                            display::success(&format!(
+                                "Seller '{}' created: {} @ ${:.2}{}",
+                                name, service, price as f64 / 100.0, resonator_str
+                            ));
+                            display::info(&format!("ID: {}", id));
+                            display::info("Agent is now visible in the web dashboard");
+                        }
+                    }
+                    AgentCommands::Marketplace { buyers, sellers, rounds, .. } => {
+                        println!("{}", "Running marketplace simulation via Playground...".bright_white());
+                        let result = pg.simulate(buyers, sellers, rounds, 500).await?;
+                        let msg = result.get("message").and_then(|v| v.as_str()).unwrap_or("Started");
+                        display::success(msg);
+                        display::info("Watch the simulation at http://localhost:8080");
+                    }
+                }
+            } else {
+                // Fallback to local mode
+                match action {
+                    AgentCommands::Buyer { name, llm, model, funding } => {
+                        agent::run_buyer(&name, llm, &model, funding).await?;
+                    }
+                    AgentCommands::Seller { name, service, price } => {
+                        agent::run_seller(&name, &service, price).await?;
+                    }
+                    AgentCommands::Marketplace { buyers, sellers, llm, .. } => {
+                        agent::run_marketplace(buyers, sellers, llm).await?;
+                    }
+                }
             }
         },
 
+        // ===== Receipt commands always run locally =====
         Commands::Receipt { action } => match action {
             ReceiptCommands::Verify { receipt } => {
                 receipt::verify_receipt(&receipt).await?;
@@ -372,8 +535,13 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
+        // ===== Status — prefer Playground =====
         Commands::Status => {
-            show_status().await?;
+            if let Some(ref pg) = playground {
+                client::display_playground_status(pg).await?;
+            } else {
+                show_local_status().await?;
+            }
         }
     }
 
@@ -389,14 +557,27 @@ fn print_banner() {
         "OpeniBank".bright_white().bold(),
         " - Programmable Wallets + Receipts for AI Agents       ║".bright_cyan()
     );
+    println!("{}", "║  Powered by Maple AI Framework (Resonance Architecture)         ║".bright_cyan());
     println!("{}", "║                                                                  ║".bright_cyan());
     println!("{}", "╚══════════════════════════════════════════════════════════════════╝".bright_cyan());
     println!();
 }
 
-async fn show_status() -> anyhow::Result<()> {
-    println!("{}", "System Status".bright_white().bold());
+async fn show_local_status() -> anyhow::Result<()> {
+    println!("{}", "System Status (Local Mode)".bright_white().bold());
     println!("{}", "─".repeat(50));
+
+    // Check Playground
+    print!("  Playground (localhost:8080): ");
+    match reqwest::get("http://localhost:8080/api/status").await {
+        Ok(resp) if resp.status().is_success() => {
+            println!("{}", "● Online (use without --local to connect)".bright_green());
+        }
+        _ => {
+            println!("{}", "○ Not running".bright_red());
+            println!("  {}", "Start with: cargo run -p openibank-playground".bright_black());
+        }
+    }
 
     // Check issuer service
     print!("  Issuer Service (localhost:3000): ");
@@ -442,9 +623,10 @@ async fn show_status() -> anyhow::Result<()> {
 
     println!();
     println!("{}", "Quick Start:".bright_white());
-    println!("  {} - Run the viral demo", "openibank demo full".bright_cyan());
-    println!("  {} - Start issuer service", "openibank issuer start".bright_cyan());
-    println!("  {} - Run with Ollama", "openibank demo full --llm ollama".bright_cyan());
+    println!("  {} - Start Playground + Dashboard", "cargo run -p openibank-playground".bright_cyan());
+    println!("  {} - Create buyer (connected to Playground)", "openibank agent buyer -n Alice".bright_cyan());
+    println!("  {} - Run marketplace", "openibank agent marketplace --buyers 3 --sellers 2".bright_cyan());
+    println!("  {} - Run the viral demo (local)", "openibank demo full --llm ollama".bright_cyan());
 
     Ok(())
 }

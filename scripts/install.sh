@@ -86,6 +86,11 @@ if command -v cargo &> /dev/null; then
     # Copy binaries
     cp target/release/openibank "${BIN_DIR}/" 2>/dev/null || true
 
+    # Build the unified server
+    echo -e "${BLUE}Building OpeniBank Server (unified binary)...${NC}"
+    cargo build --release -p openibank-server 2>/dev/null || true
+    cp target/release/openibank-server "${BIN_DIR}/" 2>/dev/null || true
+
     # Build additional services
     echo -e "${BLUE}Building additional services...${NC}"
     cargo build --release -p openibank-playground 2>/dev/null || true
@@ -138,11 +143,21 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo -e "${CYAN}Quick Start:${NC}"
 echo ""
-echo "  # Run the viral demo"
+echo "  # Start the AI Agent Banking Server"
+echo -e "  ${MAGENTA}openibank-server${NC}              # http://localhost:8080"
+echo ""
+echo "  # With Anthropic Claude LLM"
+echo -e "  ${MAGENTA}OPENIBANK_LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... openibank-server${NC}"
+echo ""
+echo "  # With local Ollama LLM"
+echo -e "  ${MAGENTA}OPENIBANK_LLM_PROVIDER=ollama openibank-server${NC}"
+echo ""
+echo "  # Run the demo"
 echo -e "  ${MAGENTA}openibank demo full${NC}"
 echo ""
 echo "  # Start the web playground"
-echo -e "  ${MAGENTA}openibank-playground${NC}  # Then open http://localhost:8080"
+echo -e "  ${MAGENTA}openibank-playground${NC}          # http://localhost:8080"
 echo ""
 echo -e "${YELLOW}AI agents need banks too. This is how they'll pay each other.${NC}"
+echo -e "${CYAN}https://www.openibank.com${NC}"
 echo ""
