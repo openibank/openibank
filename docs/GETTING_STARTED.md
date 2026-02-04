@@ -2,47 +2,106 @@
 
 OpeniBank is the **first banking system built exclusively for AI agents**. This guide will help you get up and running in minutes.
 
-## Quick Start (30 seconds)
+## Quick Start (2 minutes)
+
+### Step 1: Clone both repos
+
+OpeniBank requires the **maple** framework as a sibling directory:
 
 ```bash
-# Install OpeniBank CLI
-curl -sSL https://openibank.com/install.sh | bash
+# Create a project directory
+mkdir ~/ClaudeProjects && cd ~/ClaudeProjects
 
-# Run the viral demo
-openibank demo full
+# Clone both repos side by side
+git clone https://github.com/mapleaiorg/maple.git
+git clone https://github.com/openibank/openibank.git
+
+# You should have:
+#   ~/ClaudeProjects/
+#   ├── maple/        # Maple AI Framework
+#   └── openibank/    # OpeniBank
 ```
 
-That's it! You'll see AI agents trading with verifiable receipts.
+### Step 2: Build and run
 
-## What You Just Saw
+```bash
+cd openibank
+
+# Start the unified server (builds everything)
+cargo run --release -p openibank-server
+
+# Open: http://localhost:8080
+```
+
+That's it! You're running an AI Agent Bank.
+
+### Step 3: Try some UAL commands
+
+Open http://localhost:8080 and type in the UAL console:
+
+```
+STATUS
+FLEET STATUS
+DEPLOY buyer COUNT 3
+```
+
+Or via curl:
+```bash
+curl -s http://localhost:8080/api/status | jq .
+curl -X POST http://localhost:8080/api/ual -H "Content-Type: application/json" -d '{"command":"STATUS"}'
+```
+
+## All Services
+
+OpeniBank provides multiple binaries. Here's how to run each:
+
+| Service | Command | Port | Description |
+|---------|---------|------|-------------|
+| **openibank-server** | `cargo run -p openibank-server` | 8080 | All-in-one server (recommended) |
+| **openibank-playground** | `cargo run -p openibank-playground` | 8080 | Interactive trading playground |
+| **openibank-cli** | `cargo run -p openibank-cli -- demo full` | - | Command-line interface |
+| **openibank-issuer-resonator** | `cargo run -p openibank-issuer-resonator` | 8081 | Standalone IUSD issuer |
+| **openibank-mcp** | `cargo run -p openibank-mcp` | stdio | Claude Desktop MCP server |
+
+### Running the Playground with the CLI
+
+```bash
+# Terminal 1: Start the playground
+cargo run --release -p openibank-playground
+
+# Terminal 2: Use the CLI against it
+cargo run --release -p openibank-cli -- status
+cargo run --release -p openibank-cli -- agents list
+cargo run --release -p openibank-cli -- demo full
+```
+
+## What You'll See
 
 The demo shows the complete agent commerce cycle:
 
-1. **Agent Creation**: Buyer and seller AI agents with wallets
+1. **Agent Creation**: Buyer and seller AI agents with wallets and Maple Resonator identities
 2. **IUSD Minting**: Stablecoin creation with cryptographic receipts
-3. **Service Discovery**: Seller publishes a service, buyer evaluates it
-4. **Invoice & Escrow**: Payment locked in escrow, protected by spend permits
-5. **Delivery Verification**: Service delivered, arbiter confirms
-6. **Settlement**: Escrow releases, seller receives payment
+3. **AAS Registration**: Identity + capability grants via Authority & Accountability Service
+4. **Coupling**: Buyer-Seller resonance coupling for the trade
+5. **RCF Commitment**: Formal commitment submitted and adjudicated
+6. **Invoice & Escrow**: Payment locked in escrow, protected by spend permits
+7. **Delivery & Settlement**: Service delivered, escrow released
+8. **Receipts**: Ed25519 cryptographic receipts for every step
 
-Every step produces a **verifiable cryptographic receipt** that proves the transaction happened.
-
-## Installation Options
-
-### Option 1: Pre-built Binaries (Recommended)
+## Installation via Script
 
 ```bash
 # macOS / Linux
 curl -sSL https://openibank.com/install.sh | bash
-
-# Windows (PowerShell)
-iwr -useb https://openibank.com/install.ps1 | iex
 ```
 
-### Option 2: Build from Source
+The install script will clone both `maple` and `openibank`, build all binaries, and add them to your PATH.
+
+### Build from Source (Manual)
 
 ```bash
-# Clone the repository
+# Clone both repos side by side
+git clone https://github.com/mapleaiorg/maple.git
 git clone https://github.com/openibank/openibank.git
 cd openibank
 
@@ -51,14 +110,6 @@ cargo build --release
 
 # Add to PATH
 export PATH="$PATH:$(pwd)/target/release"
-```
-
-### Option 3: Cargo Install (Coming Soon)
-
-```bash
-# Not yet published to crates.io
-# For now, use Option 2 (build from source)
-cargo install openibank-cli  # Coming soon!
 ```
 
 ## CLI Commands
@@ -140,17 +191,19 @@ Start the interactive web playground:
 
 ```bash
 # Start the playground server
-cargo run -p openibank-playground
+cargo run --release -p openibank-playground
 
 # Open in browser
 open http://localhost:8080
 ```
 
 The playground provides:
-- **Live Agent Trading**: Watch agents trade in real-time
-- **Visual Feedback**: See reasoning and decisions
-- **Interactive Controls**: Create agents, trigger trades
-- **Real-time Updates**: Server-sent events for live state
+- **Live Agent Trading**: Watch agents trade in real-time with Maple Resonators
+- **Maple Deep Integration**: AAS commitments, coupling visualization, attention budgets
+- **UAL Command Console**: Execute banking commands from the browser
+- **Interactive Controls**: Create agents, trigger trades, simulate marketplaces
+- **Real-time Updates**: Server-sent events for all 27+ event types
+- **Fleet Orchestration**: Deploy and monitor financial agent fleets
 
 ## Claude Desktop Integration (MCP)
 
@@ -340,10 +393,13 @@ if buyer.evaluate_offer(&offer).await {
 
 ## Next Steps
 
-1. **Explore the Playground**: `cargo run -p openibank-playground`
-2. **Try Claude Integration**: Set up the MCP server
-3. **Build Custom Agents**: Check the examples in `crates/openibank-agents/examples/`
-4. **Read the Architecture Docs**: See `docs/ARCHITECTURE.md`
+1. **Start the Server**: `cargo run --release -p openibank-server` (all-in-one)
+2. **Explore the Playground**: `cargo run --release -p openibank-playground`
+3. **Try UAL Commands**: `STATUS`, `DEPLOY buyer COUNT 3`, `FLEET STATUS`
+4. **Try Claude Integration**: Set up the MCP server for Claude Desktop
+5. **Build Custom Agents**: Check `crates/openibank-agents/`
+6. **Deploy with Docker**: `docker compose up`
+7. **Read the Architecture Docs**: See `docs/ARCHITECTURE.md`
 
 ## Community
 

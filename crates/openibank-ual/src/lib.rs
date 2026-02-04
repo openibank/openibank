@@ -30,7 +30,6 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::info;
 
 // Re-export UAL types for consumers
 pub use ual_types::{UalStatement, CommitStatement, OperationStatement, ReversibilitySpec};

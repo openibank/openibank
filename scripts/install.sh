@@ -58,7 +58,20 @@ if command -v cargo &> /dev/null; then
     echo -e "${GREEN}✓ Rust/Cargo detected. Building from source...${NC}"
     echo ""
 
-    # Clone or update repo
+    # Clone or update maple (required dependency - must be sibling to openibank)
+    if [ -d "${INSTALL_DIR}/maple" ]; then
+        echo -e "${BLUE}Updating maple framework...${NC}"
+        cd "${INSTALL_DIR}/maple"
+        git pull origin main 2>/dev/null || true
+    else
+        echo -e "${BLUE}Cloning maple framework (required dependency)...${NC}"
+        git clone https://github.com/mapleaiorg/maple.git "${INSTALL_DIR}/maple" 2>/dev/null || {
+            echo -e "${YELLOW}Could not auto-clone maple. You may need to clone it manually:${NC}"
+            echo "  git clone <maple-repo-url> ${INSTALL_DIR}/maple"
+        }
+    fi
+
+    # Clone or update openibank
     if [ -d "${INSTALL_DIR}/src" ]; then
         echo -e "${BLUE}Updating existing installation...${NC}"
         cd "${INSTALL_DIR}/src"
@@ -68,7 +81,7 @@ if command -v cargo &> /dev/null; then
         git clone https://github.com/openibank/openibank.git "${INSTALL_DIR}/src" 2>/dev/null || {
             echo -e "${YELLOW}Git clone failed. Checking for local source...${NC}"
             if [ -f "Cargo.toml" ] && grep -q "openibank" Cargo.toml 2>/dev/null; then
-                INSTALL_DIR="$(pwd)"
+                INSTALL_DIR="$(pwd)/.."
                 echo -e "${GREEN}✓ Using local source directory${NC}"
             else
                 echo -e "${RED}Could not find OpeniBank source.${NC}"
@@ -76,8 +89,23 @@ if command -v cargo &> /dev/null; then
             fi
         }
     fi
-    
+
     cd "${INSTALL_DIR}/src" 2>/dev/null || cd "${INSTALL_DIR}"
+
+    # Verify maple is in the expected location (sibling ../maple)
+    if [ ! -d "../maple/crates" ]; then
+        echo -e "${RED}Error: maple framework not found at $(cd .. && pwd)/maple${NC}"
+        echo -e "${YELLOW}OpeniBank requires the maple framework as a sibling directory.${NC}"
+        echo -e "${YELLOW}Expected layout:${NC}"
+        echo "  parent_dir/"
+        echo "    ├── maple/        # Maple AI Framework"
+        echo "    └── openibank/    # OpeniBank (this project)"
+        echo ""
+        echo -e "${YELLOW}Clone maple manually and re-run:${NC}"
+        echo "  git clone <maple-repo-url> $(cd .. && pwd)/maple"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ maple framework found${NC}"
 
     # Build
     echo -e "${BLUE}Building OpeniBank CLI...${NC}"

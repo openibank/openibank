@@ -1,206 +1,306 @@
 # OpeniBank
 
-**Programmable Wallets + Receipts for AI Agents**
+**The Open AI Agent Banking Server**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/github-openibank/openibank-blue.svg)](https://github.com/openibank/openibank)
 
-OpeniBank is an **AI-agent-only banking system** built on Resonance architecture. It provides the economic primitives that enable autonomous agents to safely pay each other, escrow funds, and build machine-verifiable trust.
+OpeniBank is a **complete AI-agent banking infrastructure** you can run on your own server, Mac Mini, or Linux box. Powered by the [Maple AI Framework](https://github.com/mapleaiorg/maple) and its Resonance Architecture, it provides everything AI agents need to safely transact: wallets, escrow, stablecoin issuance, fleet orchestration, and verifiable cryptographic receipts.
 
-> **OpeniBank is AI-agent-only by design.**
-> No human UI. No human assumptions. Just agent economics.
+> **AI agents need banks too. This is how they'll pay each other.**
 
 ## Quick Start
 
+### Prerequisites
+
+OpeniBank requires the **maple** framework as a sibling directory:
+
 ```bash
-# Clone the repository
+# Clone both repos side by side
+git clone https://github.com/mapleaiorg/maple.git
 git clone https://github.com/openibank/openibank.git
+
+# Directory layout:
+#   parent_dir/
+#   ├── maple/        # Maple AI Framework
+#   └── openibank/    # OpeniBank (this project)
+```
+
+### Build & Run
+
+```bash
 cd openibank
 
-# Run the viral demo
-cargo run --example asset_cycle
+# Build everything
+cargo build --release
+
+# Start the unified server
+cargo run --release -p openibank-server
+
+# Open dashboard: http://localhost:8080
 ```
 
-That's it. You'll see a complete asset lifecycle:
+That's it. You're running an AI Agent Bank.
 
-```
-Mint → Budget → Permit → Escrow → Settlement → Receipt → Verification
-```
+## Services
 
-## What You'll See
+OpeniBank provides multiple services. Here's how to run each one:
 
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║     ██████╗ ██████╗ ███████╗███╗   ██╗██╗██████╗  █████╗ ███╗   ██╗██╗  ██╗  ║
-║    ██╔═══██╗██╔══██╗██╔════╝████╗  ██║██║██╔══██╗██╔══██╗████╗  ██║██║ ██╔╝  ║
-║    ██║   ██║██████╔╝█████╗  ██╔██╗ ██║██║██████╔╝███████║██╔██╗ ██║█████╔╝   ║
-║    ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║██║██╔══██╗██╔══██║██║╚██╗██║██╔═██╗   ║
-║    ╚██████╔╝██║     ███████╗██║ ╚████║██║██████╔╝██║  ██║██║ ╚████║██║  ██╗  ║
-║     ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝  ║
-║                                                                              ║
-║           ✓ Complete Asset Cycle Demonstrated Successfully!                  ║
-║                                                                              ║
-║           All transactions produced verifiable receipts.                     ║
-║           All spending was bounded by budgets and permits.                   ║
-║           No direct settlement without commitment.                           ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+### OpeniBank Server (Recommended - All-in-One)
+
+The unified server combines everything into a single binary:
+
+```bash
+# Default (localhost:8080)
+cargo run --release -p openibank-server
+
+# Custom port
+cargo run --release -p openibank-server -- --port 9090
+
+# With LLM support
+OPENIBANK_LLM_PROVIDER=ollama cargo run --release -p openibank-server
+OPENIBANK_LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... cargo run --release -p openibank-server
 ```
 
-## Core Concepts
+**What's included:**
+- Maple iBank Runtime (8 invariants, Resonance Architecture)
+- PALM Fleet Orchestration (deploy/scale/health/discover financial agents)
+- UAL Command Console (SQL-like banking commands)
+- AAS Accountability (identity, capabilities, commitments)
+- IUSD Stablecoin Issuer
+- REST API + Web Dashboard
+- Multi-LLM support (Ollama, OpenAI, Anthropic, Gemini, Grok)
 
-### 1. Resonator = Economic Actor
+**Endpoints:**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Web dashboard |
+| `GET /api/status` | System status |
+| `GET /api/health` | Health check |
+| `GET /api/info` | System info and capabilities |
+| `POST /api/ual` | Execute UAL commands |
+| `GET /api/fleet/status` | Fleet orchestration status |
+| `GET /api/fleet/specs` | Registered agent specs |
+| `POST /api/fleet/deploy` | Deploy agent instances |
+| `GET /api/agents` | List agents |
+| `GET /api/issuer/supply` | IUSD supply info |
 
-In OpeniBank, the only economic actor is a **Resonator**. AI agents act through Resonators. Wallets, budgets, and permits are bound to Resonator identity.
+### Playground (Interactive Web UI)
 
-### 2. SpendPermit = Agent Currency
+Full-featured interactive playground with live trading:
 
-Agents don't trade raw money. They trade **SpendPermits** - signed, expiring, bounded authorizations that can be verified by third parties.
-
+```bash
+cargo run --release -p openibank-playground
+# Open: http://localhost:8080
 ```
-┌─────────────────────────────────────┐
-│           SpendPermit               │
-├─────────────────────────────────────┤
-│ permit_id: permit_abc123            │
-│ issuer: buyer_agent                 │
-│ max_amount: $100.00                 │
-│ remaining: $100.00                  │
-│ counterparty: seller_agent          │
-│ expires_at: 2024-12-31T23:59:59Z    │
-│ signature: ed25519(...)             │
-└─────────────────────────────────────┘
+
+**Features:**
+- Create buyer/seller/arbiter agents
+- Execute trades with escrow settlement
+- Real-time SSE event streaming
+- Maple resonator coupling visualization
+- AAS commitment pipeline dashboard
+- UAL command endpoint
+
+### CLI
+
+Command-line interface for all operations:
+
+```bash
+cargo run --release -p openibank-cli -- demo full
+cargo run --release -p openibank-cli -- wallet create --name alice --funding 50000
+cargo run --release -p openibank-cli -- agent marketplace --buyers 5 --sellers 3
 ```
 
-### 3. Commitment Gate = No Direct Settlement
+### Issuer Resonator (HTTP Stablecoin Service)
 
-Every economic action must pass through the **Commitment Gate**:
+Standalone IUSD issuer with HTTP API:
 
+```bash
+cargo run --release -p openibank-issuer-resonator
 ```
-Intent → Commitment → Evidence → Policy → Receipt
+
+**Endpoints:**
+- `POST /v1/issuer/init` - Initialize issuer
+- `POST /v1/issuer/mint` - Mint IUSD
+- `POST /v1/issuer/burn` - Burn IUSD
+- `GET /v1/issuer/supply` - Supply info
+
+### MCP Server (Claude Desktop Integration)
+
+Integrate with Claude Desktop:
+
+```bash
+cargo build --release -p openibank-mcp
 ```
 
-No exceptions. This is how we achieve auditability and accountability.
+Add to `~/.config/claude/claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "openibank": {
+      "command": "/path/to/target/release/openibank-mcp"
+    }
+  }
+}
+```
 
-### 4. Receipts = Trust Artifacts
+## UAL Commands
 
-Receipts are the social objects of OpeniBank:
-- **Shareable** - agents can show them to other agents
-- **Stable** - schema won't change incompatibly
-- **Verifiable** - cryptographically signed
+The Universal Agent Language (UAL) provides SQL-like commands for banking:
+
+```sql
+-- Check system status
+STATUS
+
+-- Check agent balance
+BALANCE "buyer-001"
+
+-- Deploy a fleet of agents
+DEPLOY buyer COUNT 3
+
+-- Transfer funds
+TRANSFER 5000 IUSD FROM "buyer-001" TO "seller-001"
+
+-- Mint stablecoin
+MINT 10000 IUSD TO "reserve"
+
+-- Standard UAL commitment (compiles to RCF)
+COMMIT BY "agent-001"
+    DOMAIN Finance
+    OUTCOME "Purchase data analysis service for $100"
+    SCOPE GLOBAL
+    TAG trade TAG payment
+    REVERSIBLE;
+
+-- PALM fleet operations
+CREATE DEPLOYMENT "buyer-agent" REPLICAS 5;
+SCALE DEPLOYMENT "deploy-001" REPLICAS 10;
+HEALTH CHECK "instance-001";
+```
+
+Send commands via API:
+```bash
+curl -X POST http://localhost:8080/api/ual \
+  -H "Content-Type: application/json" \
+  -d '{"command": "STATUS"}'
+```
 
 ## Architecture
 
 ```
 openibank/
 ├── crates/
-│   ├── openibank-core/      # Wallet, permits, commitments
-│   ├── openibank-ledger/    # Double-entry accounting
-│   ├── openibank-issuer/    # Mock IUSD stablecoin
-│   ├── openibank-llm/       # LLM provider abstraction
-│   ├── openibank-agents/    # Reference agents
-│   ├── openibank-guard/     # LLM output validator
-│   └── openibank-receipts/  # Trust artifact tools
+│   ├── openibank-core/       # Wallet, permits, commitments, escrow
+│   ├── openibank-ledger/     # Double-entry immutable accounting
+│   ├── openibank-issuer/     # IUSD stablecoin with reserve management
+│   ├── openibank-llm/        # Multi-provider LLM abstraction
+│   ├── openibank-agents/     # Buyer, Seller, Arbiter agent implementations
+│   ├── openibank-guard/      # LLM output validation and safety
+│   ├── openibank-receipts/   # Ed25519 cryptographic receipt toolkit
+│   ├── openibank-maple/      # Maple bridge (Resonators, AAS, Couplings)
+│   ├── openibank-palm/       # PALM fleet orchestration integration
+│   ├── openibank-ual/        # UAL banking command parser/compiler
+│   ├── openibank-state/      # Shared system state and SSE events
+│   └── openibank-cli/        # Command-line interface
 ├── services/
-│   └── openibank-issuer-resonator/  # HTTP issuer service
-└── examples/
-    └── asset_cycle.rs       # Viral demo
+│   ├── openibank-server/     # Unified all-in-one server
+│   ├── openibank-playground/ # Interactive web playground
+│   ├── openibank-mcp/        # Claude Desktop MCP integration
+│   └── openibank-issuer-resonator/ # Standalone IUSD issuer
+├── Dockerfile                # Multi-stage Docker build
+├── docker-compose.yml        # Docker Compose with optional Ollama
+└── scripts/
+    └── install.sh            # One-line installer
 ```
 
-## LLM Support (Optional)
+### System Architecture
 
-OpeniBank works without any LLM. But if you want agent brains:
+```
+┌──────────────────────────────────────────────────────────────┐
+│  OpeniBank Server                                            │
+│                                                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ Buyer Agent │  │ Seller Agent│  │  Arbiter Agent     │  │
+│  │ (Resonator) │  │ (Resonator) │  │  (Resonator)       │  │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────────────┘  │
+│         │    Coupling     │                │                  │
+│  ═══════╪════════════════╪════════════════╪═════════════     │
+│         │  COMMITMENT BOUNDARY            │                  │
+│  ═══════╪════════════════╪════════════════╪═════════════     │
+│         │                │                │                  │
+│  ┌──────┴────────────────┴────────────────┴──────────────┐  │
+│  │  AAS (Authority & Accountability Service)              │  │
+│  │  Identity → Capability → Policy → Adjudication         │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────┐  │
+│  │  Ledger  │ │  Issuer  │ │  Escrow  │ │ PALM Fleet    │  │
+│  │  (D.E.)  │ │  (IUSD)  │ │          │ │ Orchestrator  │  │
+│  └──────────┘ └──────────┘ └──────────┘ └───────────────┘  │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Maple Runtime (8 Invariants, Resonance Architecture)  │  │
+│  └────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## LLM Support
+
+OpeniBank works **without any LLM** (deterministic mode). Add LLM for intelligent agent reasoning:
 
 ```bash
-# With local Ollama (no API key needed)
-OPENIBANK_LLM_PROVIDER=ollama cargo run --example asset_cycle
+# Local LLM with Ollama (recommended for privacy)
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.1:8b
+OPENIBANK_LLM_PROVIDER=ollama cargo run -p openibank-server
 
-# With OpenAI
-OPENIBANK_LLM_PROVIDER=openai OPENAI_API_KEY=sk-... cargo run --example asset_cycle
+# Anthropic Claude
+OPENIBANK_LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... cargo run -p openibank-server
 
-# With Anthropic Claude
-OPENIBANK_LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... cargo run --example asset_cycle
+# OpenAI
+OPENIBANK_LLM_PROVIDER=openai OPENAI_API_KEY=sk-... cargo run -p openibank-server
+
+# Deterministic (no LLM)
+cargo run -p openibank-server
 ```
-
-See [docs/local-llm.md](docs/local-llm.md) for setup instructions.
 
 **Key principle: LLMs may PROPOSE intents, NEVER EXECUTE money.**
 
-## Reference Agents
-
-### BuyerAgent
-- Has a wallet with funds and budget
-- Issues SpendPermits for purchases
-- Pays via escrow
-
-### SellerAgent
-- Publishes service offers
-- Issues invoices
-- Delivers services with proof
-
-### ArbiterAgent
-- Receives delivery proofs
-- Evaluates disputes
-- Makes release/refund decisions
-
-## Issuer Service
-
-Run the IUSD issuer as an HTTP service:
+## Docker
 
 ```bash
-cargo run -p openibank-issuer-resonator
-```
+# Build and run
+docker compose up
 
-Endpoints:
-- `POST /v1/issuer/init` - Initialize issuer
-- `POST /v1/issuer/mint` - Mint IUSD
-- `POST /v1/issuer/burn` - Burn IUSD
-- `GET /v1/issuer/supply` - Get supply info
-- `GET /v1/issuer/receipts` - Get receipts
-
-## Receipt CLI
-
-Verify and inspect receipts:
-
-```bash
-# Verify a receipt
-cargo run -p openibank-receipts -- verify receipt.json
-
-# Inspect a receipt
-cargo run -p openibank-receipts -- inspect receipt.json
+# With local LLM (Ollama)
+docker compose --profile llm up
 ```
 
 ## Architectural Invariants
 
-These are non-negotiable:
+These are non-negotiable, enforced by the Maple runtime:
 
-1. **Resonator is the only economic actor**
-2. **No direct settlement without commitment**
-3. **SpendPermits are mandatory**
-4. **All money-impacting actions emit verifiable receipts**
-5. **Authority is always bounded**
-6. **Fail closed**
-7. **LLMs may propose, never execute**
+1. **Presence precedes meaning** - agents must be present before reasoning
+2. **Meaning precedes intent** - understanding before action
+3. **Intent precedes commitment** - proposal before binding
+4. **Commitment precedes consequence** - signed before executed
+5. **Coupling bounded by attention** - finite capacity, no runaway
+6. **Safety overrides optimization** - always
+7. **Human agency cannot be bypassed** - architectural guarantee
+8. **Failure must be explicit** - fail closed, never silent
 
 ## Why OpeniBank?
 
-Traditional banking assumes humans. OpeniBank assumes agents:
-
 | Human Banking | Agent Banking (OpeniBank) |
 |--------------|---------------------------|
-| Checking/savings | Budget envelopes |
-| Cards/loans | SpendPermits |
-| KYC/KYB | Capability attestations |
-| Statements | Verifiable receipts |
-| Trust in institutions | Trust in cryptography |
-
-## Viral Growth
-
-OpeniBank spreads because:
-
-1. **Receipts become trust** - Other agents can verify your history
-2. **Permits are portable** - Trade authorization, not money
-3. **Escrow is default** - Safe transactions with strangers
-4. **No human needed** - Fully autonomous operation
+| Checking/savings | Budget envelopes with attention bounds |
+| Credit cards | SpendPermits (signed, expiring, bounded) |
+| KYC/KYB | Capability attestations via AAS |
+| Statements | Verifiable cryptographic receipts |
+| Branch network | PALM fleet orchestration |
+| SQL queries | UAL (Universal Agent Language) |
+| Trust in institutions | Trust in 8 architectural invariants |
 
 ## Contributing
 
@@ -213,9 +313,9 @@ Apache 2.0 - see [LICENSE](LICENSE)
 ## Links
 
 - **Website**: https://www.openibank.com/
-- **GitHub**: https://github.com/openibank/openibank/
+- **GitHub**: https://github.com/openibank/openibank
 - **Documentation**: https://docs.openibank.com/
 
 ---
 
-**OpeniBank: Where AI agents bank.**
+**OpeniBank**: AI agents need banks too. This is how they'll pay each other.

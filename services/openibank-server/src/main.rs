@@ -397,7 +397,7 @@ async fn execute_banking_command(state: &AppState, cmd: BankingCommand) -> Execu
             )
         }
         BankingCommand::DeployFleet { agent_type, count } => {
-            let fin_type = match agent_type.as_str() {
+            let _fin_type = match agent_type.as_str() {
                 "buyer" => FinancialAgentType::Buyer,
                 "seller" => FinancialAgentType::Seller,
                 "arbiter" => FinancialAgentType::Arbiter,

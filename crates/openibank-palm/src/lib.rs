@@ -21,7 +21,7 @@ use tracing::{info, warn};
 use palm_types::{
     AgentSpec, AgentSpecId, AgentInstance, InstanceId, DeploymentId,
     InstanceStatus, HealthStatus, PlatformProfile,
-    AutonomyLevel, RiskTolerance, CapabilityRef, ResourceRequirements,
+    AutonomyLevel, RiskTolerance, CapabilityRef,
     ResonatorIdRef, StartupPhase,
 };
 use palm_types::spec::ResonatorProfileConfig;
