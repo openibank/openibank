@@ -20,6 +20,7 @@ openibank-agents = { workspace = true }
 openibank-maple = { workspace = true }
 openibank-state = { workspace = true }
 openibank-ual = { workspace = true }
+openibank-receipts = { workspace = true }
 
 # Maple AI Framework
 maple-runtime = { workspace = true }

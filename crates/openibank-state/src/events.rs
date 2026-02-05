@@ -66,6 +66,80 @@ pub enum SystemEvent {
         timestamp: DateTime<Utc>,
     },
 
+    /// Commitment declared (intent registered before approval)
+    CommitmentDeclared {
+        commitment_id: String,
+        buyer_id: String,
+        seller_id: String,
+        amount: u64,
+        service_name: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Transfer proposed (pre-commitment or escrow lock)
+    TransferProposed {
+        transfer_id: String,
+        from: String,
+        to: String,
+        amount: u64,
+        asset: String,
+        receipt_id: Option<String>,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Transfer posted to the ledger
+    TransferPosted {
+        transfer_id: String,
+        from: String,
+        to: String,
+        amount: u64,
+        asset: String,
+        receipt_id: Option<String>,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Escrow opened (funds locked)
+    EscrowOpened {
+        escrow_id: String,
+        payer: String,
+        payee: String,
+        amount: u64,
+        asset: String,
+        receipt_id: Option<String>,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Escrow released (funds settled)
+    EscrowReleased {
+        escrow_id: String,
+        payer: String,
+        payee: String,
+        amount: u64,
+        asset: String,
+        receipt_id: Option<String>,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Issuer mint event (domain event)
+    Minted {
+        receipt_id: String,
+        account: String,
+        amount: u64,
+        asset: String,
+        total_supply: Option<u64>,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Issuer burn event (domain event)
+    Burned {
+        receipt_id: String,
+        account: String,
+        amount: u64,
+        asset: String,
+        total_supply: Option<u64>,
+        timestamp: DateTime<Utc>,
+    },
+
     /// LLM reasoning occurred (agent brain activity)
     LLMReasoning {
         agent_id: String,
@@ -83,6 +157,23 @@ pub enum SystemEvent {
         receipt_type: String,
         actor: String,
         description: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Receipt issued (standardized domain event)
+    ReceiptIssued {
+        receipt_id: String,
+        receipt_type: String,
+        actor: String,
+        description: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Receipt verification result
+    ReceiptVerified {
+        receipt_id: String,
+        valid: bool,
+        errors: Vec<String>,
         timestamp: DateTime<Utc>,
     },
 
@@ -283,8 +374,17 @@ impl SystemEvent {
             SystemEvent::TradeStarted { timestamp, .. } => *timestamp,
             SystemEvent::TradeCompleted { timestamp, .. } => *timestamp,
             SystemEvent::TradeFailed { timestamp, .. } => *timestamp,
+            SystemEvent::CommitmentDeclared { timestamp, .. } => *timestamp,
+            SystemEvent::TransferProposed { timestamp, .. } => *timestamp,
+            SystemEvent::TransferPosted { timestamp, .. } => *timestamp,
+            SystemEvent::EscrowOpened { timestamp, .. } => *timestamp,
+            SystemEvent::EscrowReleased { timestamp, .. } => *timestamp,
+            SystemEvent::Minted { timestamp, .. } => *timestamp,
+            SystemEvent::Burned { timestamp, .. } => *timestamp,
             SystemEvent::LLMReasoning { timestamp, .. } => *timestamp,
             SystemEvent::ReceiptGenerated { timestamp, .. } => *timestamp,
+            SystemEvent::ReceiptIssued { timestamp, .. } => *timestamp,
+            SystemEvent::ReceiptVerified { timestamp, .. } => *timestamp,
             SystemEvent::IssuerEvent { timestamp, .. } => *timestamp,
             SystemEvent::LedgerEntry { timestamp, .. } => *timestamp,
             SystemEvent::EscrowEvent { timestamp, .. } => *timestamp,
@@ -328,11 +428,38 @@ impl SystemEvent {
             SystemEvent::TradeFailed { reason, .. } => {
                 format!("Trade failed: {}", reason)
             }
+            SystemEvent::CommitmentDeclared { buyer_id, seller_id, amount, .. } => {
+                format!("Commitment declared: {} → {} (${:.2})", buyer_id, seller_id, *amount as f64 / 100.0)
+            }
+            SystemEvent::TransferProposed { from, to, amount, .. } => {
+                format!("Transfer proposed: {} → {} (${:.2})", from, to, *amount as f64 / 100.0)
+            }
+            SystemEvent::TransferPosted { from, to, amount, .. } => {
+                format!("Transfer posted: {} → {} (${:.2})", from, to, *amount as f64 / 100.0)
+            }
+            SystemEvent::EscrowOpened { escrow_id, amount, .. } => {
+                format!("Escrow opened {} (${:.2})", &escrow_id[..8.min(escrow_id.len())], *amount as f64 / 100.0)
+            }
+            SystemEvent::EscrowReleased { escrow_id, amount, .. } => {
+                format!("Escrow released {} (${:.2})", &escrow_id[..8.min(escrow_id.len())], *amount as f64 / 100.0)
+            }
+            SystemEvent::Minted { account, amount, .. } => {
+                format!("Minted: {} (${:.2})", account, *amount as f64 / 100.0)
+            }
+            SystemEvent::Burned { account, amount, .. } => {
+                format!("Burned: {} (${:.2})", account, *amount as f64 / 100.0)
+            }
             SystemEvent::LLMReasoning { agent_name, action, .. } => {
                 format!("LLM: {} - {}", agent_name, action)
             }
             SystemEvent::ReceiptGenerated { receipt_type, actor, .. } => {
                 format!("Receipt: {} by {}", receipt_type, actor)
+            }
+            SystemEvent::ReceiptIssued { receipt_type, actor, .. } => {
+                format!("Receipt issued: {} by {}", receipt_type, actor)
+            }
+            SystemEvent::ReceiptVerified { receipt_id, valid, .. } => {
+                format!("Receipt verified {}: {}", &receipt_id[..8.min(receipt_id.len())], if *valid { "valid" } else { "invalid" })
             }
             SystemEvent::IssuerEvent { event_type, amount, .. } => {
                 format!("Issuer {:?}: ${:.2}", event_type, *amount as f64 / 100.0)

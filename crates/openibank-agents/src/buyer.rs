@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use openibank_core::{
-    Amount, AssetId, BudgetPolicy, CounterpartyConstraint, Escrow, EscrowId, EscrowIntent,
-    Invoice, InvoiceId, ReleaseCondition, ResonatorId, SpendPermit, SpendPurpose,
+    Amount, AssetId, BudgetPolicy, CommitmentReceipt, CounterpartyConstraint, Escrow, EscrowId,
+    EscrowIntent, Invoice, InvoiceId, ReleaseCondition, ResonatorId, SpendPermit, SpendPurpose,
     Wallet,
 };
 use openibank_ledger::Ledger;
@@ -211,6 +211,15 @@ impl BuyerAgent {
 
     /// Create a payment for an invoice via escrow
     pub async fn pay_invoice(&mut self, invoice_id: &InvoiceId) -> Result<(SpendPermit, Escrow)> {
+        let (permit, escrow, _receipt) = self.pay_invoice_with_receipt(invoice_id).await?;
+        Ok((permit, escrow))
+    }
+
+    /// Create a payment for an invoice via escrow and return the commitment receipt
+    pub async fn pay_invoice_with_receipt(
+        &mut self,
+        invoice_id: &InvoiceId,
+    ) -> Result<(SpendPermit, Escrow, CommitmentReceipt)> {
         // Find the invoice
         let invoice_idx = self
             .pending_invoices
@@ -263,13 +272,24 @@ impl BuyerAgent {
             expires_at: Utc::now() + Duration::days(7),
         };
 
-        let escrow = self.wallet.create_escrow(escrow_intent)?;
+        let (escrow, receipt) = self
+            .wallet
+            .create_escrow_with_commitment(escrow_intent, &permit)?;
 
-        Ok((permit, escrow))
+        Ok((permit, escrow, receipt))
     }
 
     /// Confirm delivery and release escrow
     pub fn confirm_delivery(&mut self, escrow_id: &EscrowId) -> Result<Amount> {
+        let (amount, _receipt) = self.confirm_delivery_with_receipt(escrow_id)?;
+        Ok(amount)
+    }
+
+    /// Confirm delivery and release escrow, returning the commitment receipt
+    pub fn confirm_delivery_with_receipt(
+        &mut self,
+        escrow_id: &EscrowId,
+    ) -> Result<(Amount, CommitmentReceipt)> {
         let escrow = self
             .wallet
             .get_escrow(escrow_id)
@@ -288,9 +308,9 @@ impl BuyerAgent {
         self.wallet.update_escrow_conditions(escrow_id, 0, true)?;
 
         // Release the escrow
-        let amount = self.wallet.release_escrow(escrow_id)?;
+        let (amount, receipt) = self.wallet.release_escrow_with_receipt(escrow_id)?;
 
-        Ok(amount)
+        Ok((amount, receipt))
     }
 
     /// Get pending invoices

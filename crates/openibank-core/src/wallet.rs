@@ -14,10 +14,11 @@
 
 use std::collections::HashMap;
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::commitment::{CommitmentGate, CommitmentReceipt, ConsequenceRef, EvidenceBundle};
+use crate::escrow::EconomicIntent;
 use crate::crypto::Keypair;
 use crate::error::{CoreError, Result};
 use crate::types::*;
@@ -397,6 +398,91 @@ impl Wallet {
         Ok(escrow)
     }
 
+    /// Create an escrow and emit a commitment receipt for the escrow lock
+    pub fn create_escrow_with_commitment(
+        &mut self,
+        intent: EscrowIntent,
+        permit: &SpendPermit,
+    ) -> Result<(Escrow, CommitmentReceipt)> {
+        let budget = self.budget().ok_or(CoreError::PolicyViolation {
+            message: "No budget policy set".to_string(),
+        })?;
+
+        let payment_intent = PaymentIntent::new(
+            self.owner.clone(),
+            permit.permit_id.clone(),
+            intent.payee.clone(),
+            intent.locked_amount,
+            intent.asset.clone(),
+            SpendPurpose {
+                category: "escrow".to_string(),
+                description: format!("Escrow lock for {}", intent.invoice.0),
+            },
+        );
+
+        let consequence = ConsequenceRef {
+            consequence_type: "escrow_lock".to_string(),
+            reference_id: intent.escrow_id.0.clone(),
+            metadata: serde_json::json!({
+                "escrow_id": intent.escrow_id.0,
+                "from": intent.payer.0,
+                "to": intent.payee.0,
+                "amount": intent.locked_amount.0,
+                "asset": intent.asset.0,
+            }),
+        };
+
+        let (receipt, _evidence) =
+            self.commitment_gate
+                .create_commitment(&payment_intent, permit, budget, consequence)?;
+
+        // Debit from operational budget
+        self.compartment_mut(&CompartmentType::OperationalBudget)?
+            .debit(&intent.asset, intent.locked_amount)?;
+
+        // Consume from the permit
+        if let Some(p) = self.permits.get_mut(&permit.permit_id) {
+            p.consume(intent.locked_amount)?;
+        }
+
+        // Update budget spent total
+        if let Some(ref mut b) = self
+            .compartment_mut(&CompartmentType::OperationalBudget)?
+            .budget
+        {
+            b.record_spend(intent.locked_amount)?;
+        }
+
+        // Create the escrow
+        let escrow = Escrow {
+            escrow_id: intent.escrow_id.clone(),
+            invoice_id: intent.invoice.clone(),
+            payer: intent.payer.clone(),
+            payee: intent.payee.clone(),
+            amount: intent.locked_amount,
+            asset: intent.asset.clone(),
+            state: EscrowState::Locked,
+            release_conditions: intent.release_conditions.clone(),
+            arbiter: intent.arbiter.clone(),
+            created_at: intent.created_at,
+            expires_at: intent.expires_at,
+        };
+
+        // Store in escrow compartment
+        self.compartment_mut(&CompartmentType::Escrow)?
+            .escrows
+            .insert(escrow.escrow_id.clone(), escrow.clone());
+
+        // Credit to escrow compartment balance
+        self.compartment_mut(&CompartmentType::Escrow)?
+            .credit(&intent.asset, intent.locked_amount)?;
+
+        // Store receipt
+        self.receipts.push(receipt.clone());
+
+        Ok((escrow, receipt))
+    }
+
     /// Release an escrow to the payee
     pub fn release_escrow(&mut self, escrow_id: &EscrowId) -> Result<Amount> {
         // Get and remove the escrow
@@ -420,6 +506,118 @@ impl Wallet {
             .debit(&escrow.asset, escrow.amount)?;
 
         Ok(escrow.amount)
+    }
+
+    /// Release an escrow and emit a commitment receipt
+    pub fn release_escrow_with_receipt(
+        &mut self,
+        escrow_id: &EscrowId,
+    ) -> Result<(Amount, CommitmentReceipt)> {
+        // Fetch escrow details without holding a mutable borrow
+        let escrow_snapshot = {
+            let compartment = self.compartment(&CompartmentType::Escrow)?;
+            compartment
+                .escrows
+                .get(escrow_id)
+                .cloned()
+                .ok_or_else(|| CoreError::EscrowNotFound {
+                    escrow_id: escrow_id.0.clone(),
+                })?
+        };
+
+        if escrow_snapshot.state != EscrowState::Locked {
+            return Err(CoreError::EscrowConditionsNotMet {
+                reason: format!("Escrow is in state {:?}, not Locked", escrow_snapshot.state),
+            });
+        }
+
+        let intent = EconomicIntent::EscrowRelease {
+            escrow_id: escrow_snapshot.escrow_id.clone(),
+            to: escrow_snapshot.payee.clone(),
+            amount: escrow_snapshot.amount,
+        };
+
+        let evidence = EvidenceBundle {
+            intent_hash: crate::crypto::hash_object(&intent)?,
+            policy_snapshot_hash: "escrow_release_policy".to_string(),
+            budget_snapshot_hash: "n/a".to_string(),
+            permit_hash: "n/a".to_string(),
+            attestations: vec![],
+            gathered_at: Utc::now(),
+        };
+
+        let consequence = ConsequenceRef {
+            consequence_type: "escrow_release".to_string(),
+            reference_id: format!("release_{}", uuid::Uuid::new_v4()),
+            metadata: serde_json::json!({
+                "escrow_id": escrow_snapshot.escrow_id.0,
+                "from": escrow_snapshot.payer.0,
+                "to": escrow_snapshot.payee.0,
+                "amount": escrow_snapshot.amount.0,
+                "asset": escrow_snapshot.asset.0,
+            }),
+        };
+
+        let receipt = {
+            use crate::commitment::CommitmentId;
+            let commitment_id = CommitmentId::new();
+            let committed_at = Utc::now();
+
+            #[derive(serde::Serialize)]
+            struct SignableReceipt {
+                commitment_id: CommitmentId,
+                actor: ResonatorId,
+                intent_hash: String,
+                policy_snapshot_hash: String,
+                evidence_hash: String,
+                consequence_ref: ConsequenceRef,
+                committed_at: DateTime<Utc>,
+            }
+
+            let evidence_hash = crate::crypto::hash_object(&evidence)?;
+            let signable = SignableReceipt {
+                commitment_id: commitment_id.clone(),
+                actor: self.owner.clone(),
+                intent_hash: evidence.intent_hash.clone(),
+                policy_snapshot_hash: evidence.policy_snapshot_hash.clone(),
+                evidence_hash: evidence_hash.clone(),
+                consequence_ref: consequence.clone(),
+                committed_at,
+            };
+
+            let signing_bytes = serde_json::to_vec(&signable)?;
+            let signature = self.keypair.sign(&signing_bytes);
+
+            CommitmentReceipt {
+                commitment_id,
+                actor: self.owner.clone(),
+                intent_hash: evidence.intent_hash.clone(),
+                policy_snapshot_hash: evidence.policy_snapshot_hash.clone(),
+                evidence_hash,
+                consequence_ref: consequence,
+                committed_at,
+                signature,
+                signer_public_key: self.keypair.public_key_hex(),
+            }
+        };
+
+        // Remove the escrow
+        let escrow = self
+            .compartment_mut(&CompartmentType::Escrow)?
+            .escrows
+            .remove(escrow_id)
+            .ok_or_else(|| CoreError::EscrowNotFound {
+                escrow_id: escrow_id.0.clone(),
+            })?;
+
+        // Debit from escrow compartment
+        self.compartment_mut(&CompartmentType::Escrow)?
+            .debit(&escrow.asset, escrow.amount)?;
+
+        // Store receipt
+        self.receipts.push(receipt.clone());
+
+        Ok((escrow.amount, receipt))
     }
 
     /// Get all receipts

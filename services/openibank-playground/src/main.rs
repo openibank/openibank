@@ -15,6 +15,7 @@
 //! CLI ────┘  (connects via HTTP)
 //! ```
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,7 +29,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use futures::stream::Stream;
 use openibank_agents::{AgentBrain, Service};
 use openibank_core::{Amount, AssetId, ResonatorId};
@@ -42,8 +43,9 @@ use openibank_maple::{
 };
 use openibank_state::{
     SystemState, SystemEvent,
-    TransactionRecord, TransactionStatus,
+    ReceiptRecord, TransactionRecord, TransactionStatus,
 };
+use openibank_receipts::{Receipt, VerificationResult, verify_receipt_json};
 use serde::Deserialize;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
@@ -117,6 +119,10 @@ async fn main() {
         // Transactions & Receipts
         .route("/api/transactions", get(get_transactions))
         .route("/api/receipts", get(get_receipts))
+        .route("/api/receipts/export", get(export_receipts))
+        .route("/api/receipts/verify", post(verify_receipt))
+        .route("/api/receipts/replay", post(replay_receipts))
+        .route("/api/receipts/{id}", get(get_receipt))
         // Resonators (Maple)
         .route("/api/resonators", get(get_resonators))
         // System log
@@ -302,13 +308,29 @@ async fn fund_agent(
         Amount::new(req.amount),
         "Manual treasury top-up",
     );
-    {
+    let mint_receipt = {
         let issuer = state.issuer.read().await;
         issuer
             .mint(mint)
             .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-    }
+            .map_err(|e| AppError::Internal(e.to_string()))?
+    };
+
+    let mint_record = build_receipt_record(
+        &Receipt::Issuer(mint_receipt.clone()),
+        Some("issuer".to_string()),
+        format!("Minted ${:.2} to {}", req.amount as f64 / 100.0, id),
+    );
+    store_receipt_records(&state, vec![mint_record]).await;
+
+    state.emit_event(SystemEvent::Minted {
+        receipt_id: mint_receipt.receipt_id.clone(),
+        account: id.clone(),
+        amount: mint_receipt.amount.0,
+        asset: mint_receipt.asset.0.clone(),
+        total_supply: None,
+        timestamp: mint_receipt.issued_at,
+    });
 
     // Then credit the local wallet view for this agent.
     let (agent_name, old_balance, new_balance, info) = {
@@ -499,11 +521,27 @@ async fn create_buyer(
     // Fund the buyer via issuer
     let resonator_id = ResonatorId::from_string(&agent_id);
     let mint = MintIntent::new(resonator_id, Amount::new(funding), "Playground funding");
-    {
+    let mint_receipt = {
         let issuer = state.issuer.read().await;
         issuer.mint(mint).await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-    }
+            .map_err(|e| AppError::Internal(e.to_string()))?
+    };
+
+    let mint_record = build_receipt_record(
+        &Receipt::Issuer(mint_receipt.clone()),
+        Some("issuer".to_string()),
+        format!("Minted ${:.2} to {}", funding as f64 / 100.0, agent_id),
+    );
+    store_receipt_records(&state, vec![mint_record]).await;
+
+    state.emit_event(SystemEvent::Minted {
+        receipt_id: mint_receipt.receipt_id.clone(),
+        account: agent_id.clone(),
+        amount: mint_receipt.amount.0,
+        asset: mint_receipt.asset.0.clone(),
+        total_supply: None,
+        timestamp: mint_receipt.issued_at,
+    });
 
     // Setup buyer wallet
     agent.as_buyer_mut().unwrap()
@@ -834,6 +872,14 @@ async fn execute_trade_internal(
                     service_name: service_name.clone(),
                     timestamp: Utc::now(),
                 });
+                state.emit_event(SystemEvent::CommitmentDeclared {
+                    commitment_id: cid.clone(),
+                    buyer_id: buyer_id.to_string(),
+                    seller_id: seller_id.to_string(),
+                    amount: service_price,
+                    service_name: service_name.clone(),
+                    timestamp: Utc::now(),
+                });
 
                 // Submit to AAS pipeline
                 match state.commitment_manager.submit_and_track(
@@ -972,15 +1018,45 @@ async fn execute_trade_internal(
             .map_err(|e| AppError::Internal(e.to_string()))?;
     }
 
-    let (_, escrow) = {
+    let mut receipt_records: Vec<ReceiptRecord> = Vec::new();
+
+    let (escrow, escrow_receipt) = {
         let buyer = registry.agents.get_mut(buyer_id).unwrap();
-        buyer.as_buyer_mut().unwrap()
-            .pay_invoice(&invoice_id)
+        let buyer_agent = buyer.as_buyer_mut().unwrap();
+        let (_permit, escrow, receipt) = buyer_agent
+            .pay_invoice_with_receipt(&invoice_id)
             .await
-            .map_err(|e| AppError::Internal(e.to_string()))?
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        (escrow, receipt)
     };
 
     let escrow_id = escrow.escrow_id.clone();
+    let escrow_receipt_id = escrow_receipt.commitment_id.0.clone();
+    let escrow_receipt_record = build_receipt_record(
+        &Receipt::Commitment(escrow_receipt.clone()),
+        Some(buyer_id.to_string()),
+        format!("Escrow lock for {}", service_name),
+    );
+    receipt_records.push(escrow_receipt_record);
+
+    state.emit_event(SystemEvent::EscrowOpened {
+        escrow_id: escrow_id.0.clone(),
+        payer: buyer_id.to_string(),
+        payee: seller_id.to_string(),
+        amount: escrow.amount.0,
+        asset: escrow.asset.0.clone(),
+        receipt_id: Some(escrow_receipt_id.clone()),
+        timestamp: Utc::now(),
+    });
+    state.emit_event(SystemEvent::TransferProposed {
+        transfer_id: escrow_receipt_id.clone(),
+        from: buyer_id.to_string(),
+        to: seller_id.to_string(),
+        amount: escrow.amount.0,
+        asset: escrow.asset.0.clone(),
+        receipt_id: Some(escrow_receipt_id.clone()),
+        timestamp: Utc::now(),
+    });
 
     // Seller delivers
     {
@@ -991,12 +1067,20 @@ async fn execute_trade_internal(
     }
 
     // Buyer confirms delivery
-    let amount = {
+    let (amount, release_receipt) = {
         let buyer = registry.agents.get_mut(buyer_id).unwrap();
         buyer.as_buyer_mut().unwrap()
-            .confirm_delivery(&escrow_id)
+            .confirm_delivery_with_receipt(&escrow_id)
             .map_err(|e| AppError::Internal(e.to_string()))?
     };
+
+    let release_receipt_id = release_receipt.commitment_id.0.clone();
+    let release_receipt_record = build_receipt_record(
+        &Receipt::Commitment(release_receipt.clone()),
+        Some(buyer_id.to_string()),
+        format!("Escrow release for {}", service_name),
+    );
+    receipt_records.push(release_receipt_record);
 
     // Seller receives payment
     {
@@ -1005,6 +1089,45 @@ async fn execute_trade_internal(
             .receive_payment(amount)
             .map_err(|e| AppError::Internal(e.to_string()))?;
     }
+
+    let (debit_entry, credit_entry) = state.ledger
+        .transfer(
+            &ResonatorId::from_string(buyer_id),
+            &ResonatorId::from_string(seller_id),
+            &AssetId::iusd(),
+            amount,
+            &release_receipt,
+        )
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    state.emit_event(SystemEvent::LedgerEntry {
+        entry_id: debit_entry.0.clone(),
+        from: buyer_id.to_string(),
+        to: seller_id.to_string(),
+        amount: amount.0,
+        memo: Some(format!("credit_entry={}", credit_entry.0)),
+        timestamp: Utc::now(),
+    });
+
+    state.emit_event(SystemEvent::EscrowReleased {
+        escrow_id: escrow_id.0.clone(),
+        payer: buyer_id.to_string(),
+        payee: seller_id.to_string(),
+        amount: amount.0,
+        asset: AssetId::iusd().0,
+        receipt_id: Some(release_receipt_id.clone()),
+        timestamp: Utc::now(),
+    });
+    state.emit_event(SystemEvent::TransferPosted {
+        transfer_id: release_receipt_id.clone(),
+        from: buyer_id.to_string(),
+        to: seller_id.to_string(),
+        amount: amount.0,
+        asset: AssetId::iusd().0,
+        receipt_id: Some(release_receipt_id.clone()),
+        timestamp: Utc::now(),
+    });
 
     // ================================================================
     // Phase 6: Record outcome in Maple and update couplings
@@ -1084,7 +1207,7 @@ async fn execute_trade_internal(
         service_name: service_name.clone(),
         amount: amount.0,
         status: TransactionStatus::Completed,
-        receipt_id: Some(escrow_id.0.clone()),
+        receipt_id: Some(release_receipt_id.clone()),
         timestamp: Utc::now(),
     });
 
@@ -1098,13 +1221,16 @@ async fn execute_trade_internal(
         seller_id: seller_id.to_string(),
         service_name: service_name.clone(),
         amount: amount.0,
-        receipt_id: Some(escrow_id.0),
+        receipt_id: Some(release_receipt_id.clone()),
         timestamp: Utc::now(),
     });
 
     state.log_activity(
         openibank_state::activity::ActivityEntry::trade_completed(buyer_id, seller_id, &service_name, amount.0)
     ).await;
+
+    drop(registry);
+    store_receipt_records(&state, receipt_records).await;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -1271,10 +1397,26 @@ async fn create_buyer_internal(state: &Arc<SystemState>, req: CreateBuyerRequest
 
     let resonator_id = ResonatorId::from_string(&agent_id);
     let mint = MintIntent::new(resonator_id, Amount::new(funding), "Simulation funding");
-    {
+    let mint_receipt = {
         let issuer = state.issuer.read().await;
-        issuer.mint(mint).await.map_err(|e| e.to_string())?;
-    }
+        issuer.mint(mint).await.map_err(|e| e.to_string())?
+    };
+
+    let mint_record = build_receipt_record(
+        &Receipt::Issuer(mint_receipt.clone()),
+        Some("issuer".to_string()),
+        format!("Minted ${:.2} to {}", funding as f64 / 100.0, agent_id),
+    );
+    store_receipt_records(&state, vec![mint_record]).await;
+
+    state.emit_event(SystemEvent::Minted {
+        receipt_id: mint_receipt.receipt_id.clone(),
+        account: agent_id.clone(),
+        amount: mint_receipt.amount.0,
+        asset: mint_receipt.asset.0.clone(),
+        total_supply: None,
+        timestamp: mint_receipt.issued_at,
+    });
 
     agent.as_buyer_mut().unwrap()
         .setup(Amount::new(funding), Amount::new(funding / 2))
@@ -1407,6 +1549,265 @@ async fn get_receipts(State(state): State<Arc<SystemState>>) -> Json<serde_json:
     }))
 }
 
+fn receipt_timestamp(receipt: &Receipt) -> DateTime<Utc> {
+    match receipt {
+        Receipt::Commitment(r) => r.committed_at,
+        Receipt::Issuer(r) => r.issued_at,
+    }
+}
+
+fn receipt_type_label(receipt: &Receipt) -> &'static str {
+    match receipt {
+        Receipt::Commitment(_) => "commitment",
+        Receipt::Issuer(_) => "issuer",
+    }
+}
+
+fn receipt_actor_default(receipt: &Receipt) -> String {
+    match receipt {
+        Receipt::Commitment(r) => r.actor.0.clone(),
+        Receipt::Issuer(_) => "issuer".to_string(),
+    }
+}
+
+fn build_receipt_record(
+    receipt: &Receipt,
+    actor_override: Option<String>,
+    description: String,
+) -> ReceiptRecord {
+    let receipt_id = receipt.id().to_string();
+    let actor = actor_override.unwrap_or_else(|| receipt_actor_default(receipt));
+    let receipt_type = receipt_type_label(receipt).to_string();
+    let timestamp = receipt_timestamp(receipt);
+    let data = serde_json::to_value(receipt).unwrap_or_else(|_| serde_json::json!({"error": "receipt_serialization_failed"}));
+
+    ReceiptRecord {
+        receipt_id,
+        receipt_type,
+        actor,
+        description,
+        data,
+        timestamp,
+    }
+}
+
+async fn store_receipt_records(state: &Arc<SystemState>, records: Vec<ReceiptRecord>) {
+    if records.is_empty() {
+        return;
+    }
+
+    {
+        let mut registry = state.agents.write().await;
+        registry.receipts.extend(records.clone());
+    }
+
+    for record in records {
+        state.emit_event(SystemEvent::ReceiptIssued {
+            receipt_id: record.receipt_id.clone(),
+            receipt_type: record.receipt_type.clone(),
+            actor: record.actor.clone(),
+            description: record.description.clone(),
+            timestamp: record.timestamp,
+        });
+        state.emit_event(SystemEvent::ReceiptGenerated {
+            receipt_id: record.receipt_id.clone(),
+            receipt_type: record.receipt_type.clone(),
+            actor: record.actor.clone(),
+            description: record.description.clone(),
+            timestamp: record.timestamp,
+        });
+        state.log_activity(
+            openibank_state::activity::ActivityEntry::info(
+                "receipt",
+                openibank_state::activity::ActivityCategory::Receipt,
+                format!("Receipt {} issued", record.receipt_id),
+            )
+            .with_data(record.data.clone()),
+        ).await;
+    }
+}
+
+async fn get_receipt(
+    State(state): State<Arc<SystemState>>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let registry = state.agents.read().await;
+    let receipt = registry.receipts.iter().find(|r| r.receipt_id == id);
+    if let Some(record) = receipt {
+        return Ok(Json(serde_json::json!({ "receipt": record })));
+    }
+
+    Err(AppError::NotFound(format!("Receipt {} not found", id)))
+}
+
+async fn export_receipts(State(state): State<Arc<SystemState>>) -> impl IntoResponse {
+    let registry = state.agents.read().await;
+    let mut receipts = registry.receipts.clone();
+    receipts.sort_by_key(|r| r.timestamp);
+
+    let mut lines = Vec::with_capacity(receipts.len());
+    for record in receipts {
+        if let Ok(line) = serde_json::to_string(&record.data) {
+            lines.push(line);
+        }
+    }
+
+    let body = lines.join("\n");
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/x-ndjson"));
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"openibank-receipts.jsonl\""),
+    );
+    (headers, body)
+}
+
+#[derive(Deserialize)]
+struct VerifyReceiptRequest {
+    receipt_id: Option<String>,
+    receipt: Option<serde_json::Value>,
+}
+
+async fn verify_receipt(
+    State(state): State<Arc<SystemState>>,
+    Json(req): Json<VerifyReceiptRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let payload = if let Some(receipt_value) = req.receipt {
+        serde_json::to_string(&receipt_value)
+            .map_err(|e| AppError::Internal(format!("Receipt serialization failed: {}", e)))?
+    } else if let Some(receipt_id) = req.receipt_id.as_ref() {
+        let registry = state.agents.read().await;
+        let record = registry
+            .receipts
+            .iter()
+            .find(|r| &r.receipt_id == receipt_id)
+            .ok_or_else(|| AppError::NotFound(format!("Receipt {} not found", receipt_id)))?;
+        serde_json::to_string(&record.data)
+            .map_err(|e| AppError::Internal(format!("Receipt serialization failed: {}", e)))?
+    } else {
+        return Err(AppError::Internal("receipt_id or receipt payload required".to_string()));
+    };
+
+    let result: VerificationResult = verify_receipt_json(&payload);
+    state.emit_event(SystemEvent::ReceiptVerified {
+        receipt_id: result.receipt_id.clone(),
+        valid: result.valid,
+        errors: result.errors.clone(),
+        timestamp: Utc::now(),
+    });
+
+    Ok(Json(serde_json::json!({
+        "result": result
+    })))
+}
+
+async fn replay_receipts(
+    State(_state): State<Arc<SystemState>>,
+    body: String,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let mut receipts = Vec::new();
+    let mut errors = Vec::new();
+
+    for (index, line) in body.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<Receipt>(trimmed) {
+            Ok(receipt) => receipts.push(receipt),
+            Err(e) => errors.push(format!("Line {}: {}", index + 1, e)),
+        }
+    }
+
+    receipts.sort_by_key(receipt_timestamp);
+
+    let mut balances: HashMap<String, i128> = HashMap::new();
+    let mut timeline: Vec<serde_json::Value> = Vec::new();
+
+    for receipt in &receipts {
+        match receipt {
+            Receipt::Issuer(r) => {
+                let amount = r.amount.0 as i128;
+                let entry = balances.entry(r.target.0.clone()).or_insert(0);
+                match r.operation {
+                    openibank_core::IssuerOperation::Mint => {
+                        *entry += amount;
+                        timeline.push(serde_json::json!({
+                            "timestamp": r.issued_at,
+                            "event": "Minted",
+                            "receipt_id": r.receipt_id,
+                            "account": r.target.0,
+                            "amount": r.amount.0,
+                            "asset": r.asset.0,
+                        }));
+                    }
+                    openibank_core::IssuerOperation::Burn => {
+                        *entry -= amount;
+                        timeline.push(serde_json::json!({
+                            "timestamp": r.issued_at,
+                            "event": "Burned",
+                            "receipt_id": r.receipt_id,
+                            "account": r.target.0,
+                            "amount": r.amount.0,
+                            "asset": r.asset.0,
+                        }));
+                    }
+                }
+            }
+            Receipt::Commitment(r) => {
+                let metadata = r.consequence_ref.metadata.as_object();
+                let consequence_type = r.consequence_ref.consequence_type.as_str();
+                let amount = metadata.and_then(|m| m.get("amount")).and_then(|v| v.as_u64());
+                let from = metadata.and_then(|m| m.get("from")).and_then(|v| v.as_str());
+                let to = metadata.and_then(|m| m.get("to")).and_then(|v| v.as_str());
+                let asset = metadata
+                    .and_then(|m| m.get("asset"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("iusd");
+
+                let should_apply = matches!(consequence_type, "ledger_transfer" | "escrow_release");
+
+                if let (Some(amount), Some(from), Some(to)) = (amount, from, to) {
+                    if should_apply {
+                        let entry_from = balances.entry(from.to_string()).or_insert(0);
+                        *entry_from -= amount as i128;
+                        let entry_to = balances.entry(to.to_string()).or_insert(0);
+                        *entry_to += amount as i128;
+                    }
+                    timeline.push(serde_json::json!({
+                        "timestamp": r.committed_at,
+                        "event": if should_apply { "TransferPosted" } else { "TransferProposed" },
+                        "receipt_id": r.commitment_id.0,
+                        "from": from,
+                        "to": to,
+                        "amount": amount,
+                        "asset": asset,
+                        "consequence": consequence_type,
+                    }));
+                } else {
+                    errors.push(format!(
+                        "Commitment {} missing transfer metadata",
+                        r.commitment_id.0
+                    ));
+                }
+            }
+        }
+    }
+
+    let balances_json: serde_json::Value = balances
+        .into_iter()
+        .map(|(k, v)| (k, serde_json::json!({ "iusd": v })))
+        .collect::<serde_json::Map<_, _>>()
+        .into();
+
+    Ok(Json(serde_json::json!({
+        "receipt_count": receipts.len(),
+        "timeline": timeline,
+        "balances": balances_json,
+        "errors": errors,
+    })))
+}
+
 // ============================================================================
 // Maple Resonators
 // ============================================================================
@@ -1470,6 +1871,170 @@ async fn reset_playground(State(state): State<Arc<SystemState>>) -> Json<serde_j
     }))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::extract::State;
+
+    async fn setup_demo_state() -> Arc<SystemState> {
+        Arc::new(SystemState::new().await.expect("system state"))
+    }
+
+    async fn create_buyer_test(state: &Arc<SystemState>, name: &str, funding: u64) -> String {
+        let agent_id = format!("res_{}", name.to_lowercase().replace(' ', "_"));
+        let brain = AgentBrain::deterministic();
+        let resonator_handle = state.runtime.register_agent(name, ResonatorAgentRole::Buyer).await.ok();
+
+        let mut agent = MapleResonatorAgent::new_buyer(
+            name,
+            state.ledger.clone(),
+            brain,
+            resonator_handle,
+        );
+
+        let resonator_id = ResonatorId::from_string(&agent_id);
+        let mint = MintIntent::new(resonator_id, Amount::new(funding), "Test funding");
+        let mint_receipt = {
+            let issuer = state.issuer.read().await;
+            issuer.mint(mint).await.expect("mint")
+        };
+
+        let mint_record = build_receipt_record(
+            &Receipt::Issuer(mint_receipt.clone()),
+            Some("issuer".to_string()),
+            format!("Minted ${:.2} to {}", funding as f64 / 100.0, agent_id),
+        );
+        store_receipt_records(state, vec![mint_record]).await;
+
+        state.emit_event(SystemEvent::Minted {
+            receipt_id: mint_receipt.receipt_id.clone(),
+            account: agent_id.clone(),
+            amount: mint_receipt.amount.0,
+            asset: mint_receipt.asset.0.clone(),
+            total_supply: None,
+            timestamp: mint_receipt.issued_at,
+        });
+
+        agent
+            .as_buyer_mut()
+            .unwrap()
+            .setup(Amount::new(funding), Amount::new(funding / 2))
+            .expect("setup buyer");
+
+        let mut registry = state.agents.write().await;
+        registry.agents.insert(agent_id.clone(), agent);
+        agent_id
+    }
+
+    async fn create_seller_test(state: &Arc<SystemState>, name: &str, service_name: &str, price: u64) -> String {
+        let agent_id = format!("res_{}", name.to_lowercase().replace(' ', "_"));
+        let brain = AgentBrain::deterministic();
+        let resonator_handle = state.runtime.register_agent(name, ResonatorAgentRole::Seller).await.ok();
+
+        let mut agent = MapleResonatorAgent::new_seller(
+            name,
+            state.ledger.clone(),
+            brain,
+            resonator_handle,
+        );
+
+        let service = Service {
+            name: service_name.to_string(),
+            description: format!("AI service: {}", service_name),
+            price: Amount::new(price),
+            asset: AssetId::iusd(),
+            delivery_conditions: vec!["Service completion".to_string()],
+        };
+        agent.as_seller_mut().unwrap().publish_service(service);
+
+        let mut registry = state.agents.write().await;
+        registry.agents.insert(agent_id.clone(), agent);
+        agent_id
+    }
+
+    #[tokio::test]
+    async fn test_receipt_verification_demo_flow() {
+        let state = setup_demo_state().await;
+
+        create_buyer_test(&state, "Alice", 50_000).await;
+        create_seller_test(&state, "DataCorp", "Data Analysis", 10_000).await;
+
+        let _ = execute_trade_internal(&state, "res_alice", "res_datacorp")
+            .await
+            .expect("execute trade");
+
+        let registry = state.agents.read().await;
+        let receipts = registry.receipts.clone();
+        assert!(!receipts.is_empty(), "expected receipts from demo flow");
+
+        let mut any_valid = false;
+        for record in receipts {
+            let json = serde_json::to_string(&record.data).expect("receipt json");
+            let result = verify_receipt_json(&json);
+            if result.valid {
+                any_valid = true;
+                break;
+            }
+        }
+
+        assert!(any_valid, "expected at least one valid receipt");
+    }
+
+    #[tokio::test]
+    async fn test_replay_reproduces_balances() {
+        let state = setup_demo_state().await;
+
+        create_buyer_test(&state, "Alice", 50_000).await;
+        create_seller_test(&state, "DataCorp", "Data Analysis", 10_000).await;
+
+        let _ = execute_trade_internal(&state, "res_alice", "res_datacorp")
+            .await
+            .expect("execute trade");
+
+        let registry = state.agents.read().await;
+        let receipts = registry.receipts.clone();
+        drop(registry);
+
+        let jsonl = receipts
+            .iter()
+            .filter_map(|record| serde_json::to_string(&record.data).ok())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let response = replay_receipts(State(state.clone()), jsonl)
+            .await
+            .expect("replay");
+        let Json(payload) = response;
+        let balances = payload
+            .get("balances")
+            .and_then(|b| b.as_object())
+            .expect("balances map");
+
+        let buyer_balance = state
+            .ledger
+            .balance(&ResonatorId::from_string("res_alice"), &AssetId::iusd())
+            .await;
+        let seller_balance = state
+            .ledger
+            .balance(&ResonatorId::from_string("res_datacorp"), &AssetId::iusd())
+            .await;
+
+        let buyer_replay = balances
+            .get("res_alice")
+            .and_then(|v| v.get("iusd"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let seller_replay = balances
+            .get("res_datacorp")
+            .and_then(|v| v.get("iusd"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+
+        assert_eq!(buyer_replay as u64, buyer_balance.0);
+        assert_eq!(seller_replay as u64, seller_balance.0);
+    }
+}
+
 // ============================================================================
 // SSE Event Stream
 // ============================================================================
@@ -1503,8 +2068,17 @@ async fn event_stream(
                         SystemEvent::TradeStarted { .. } => "trade_started",
                         SystemEvent::TradeCompleted { .. } => "trade_completed",
                         SystemEvent::TradeFailed { .. } => "trade_failed",
+                        SystemEvent::CommitmentDeclared { .. } => "commitment_declared",
+                        SystemEvent::TransferProposed { .. } => "transfer_proposed",
+                        SystemEvent::TransferPosted { .. } => "transfer_posted",
+                        SystemEvent::EscrowOpened { .. } => "escrow_opened",
+                        SystemEvent::EscrowReleased { .. } => "escrow_released",
+                        SystemEvent::Minted { .. } => "minted",
+                        SystemEvent::Burned { .. } => "burned",
                         SystemEvent::LLMReasoning { .. } => "llm_reasoning",
                         SystemEvent::ReceiptGenerated { .. } => "receipt_generated",
+                        SystemEvent::ReceiptIssued { .. } => "receipt_issued",
+                        SystemEvent::ReceiptVerified { .. } => "receipt_verified",
                         SystemEvent::IssuerEvent { .. } => "issuer_event",
                         SystemEvent::LedgerEntry { .. } => "ledger_entry",
                         SystemEvent::EscrowEvent { .. } => "escrow_event",

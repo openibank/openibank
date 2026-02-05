@@ -1675,6 +1675,56 @@
                         </div>
                     </article>
                 </div>
+
+                <div class="grid-2">
+                    <article class="card">
+                        <div class="card-head">
+                            <div>
+                                <div class="card-title">Receipt Timeline</div>
+                                <div class="card-sub">Every commitment and issuer receipt in order.</div>
+                            </div>
+                            <div class="button-group">
+                                <button class="btn-soft" id="btnRefreshReceiptTimeline">Refresh</button>
+                                <button class="btn-soft" id="btnDownloadReceipts">Download JSONL</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="trace-list" id="receiptTimeline">
+                                <div class="empty">No receipts yet.</div>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-head">
+                            <div>
+                                <div class="card-title">Receipt Verification & Replay</div>
+                                <div class="card-sub">Verify receipts and replay balances from JSONL bundles.</div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="field" style="margin-bottom:10px;">
+                                <label for="receiptVerifyInput">Receipt ID</label>
+                                <input id="receiptVerifyInput" placeholder="receipt or commitment id" />
+                            </div>
+                            <div class="button-group" style="margin-bottom:10px;">
+                                <button class="btn" id="btnVerifyReceipt">Verify</button>
+                                <button class="btn-soft" id="btnClearVerify">Clear</button>
+                            </div>
+                            <pre class="mono" id="receiptVerifyResult" style="white-space:pre-wrap; border:1px solid var(--line); border-radius:10px; background:rgba(8,18,36,0.84); padding:10px; min-height:80px;">Awaiting receipt...</pre>
+
+                            <div class="field" style="margin-top:14px; margin-bottom:10px;">
+                                <label for="receiptReplayInput">Receipt Bundle (JSONL)</label>
+                                <textarea id="receiptReplayInput" placeholder="Paste JSONL receipts here or load export"></textarea>
+                            </div>
+                            <div class="button-group" style="margin-bottom:10px;">
+                                <button class="btn" id="btnReplayReceipts">Replay</button>
+                                <button class="btn-soft" id="btnLoadReceiptExport">Load Latest</button>
+                            </div>
+                            <pre class="mono" id="receiptReplayResult" style="white-space:pre-wrap; border:1px solid var(--line); border-radius:10px; background:rgba(8,18,36,0.84); padding:10px; min-height:80px;">Awaiting replay...</pre>
+                        </div>
+                    </article>
+                </div>
             </section>
 
             <section class="tab-panel" id="tab-simulation">
@@ -1765,6 +1815,7 @@
             ledger: { accounts: [], total_entries: 0, recent_entries: [] },
             supply: null,
             receipts: [],
+            receiptRecords: [],
             activity: [],
             events: [],
             dashboardEventFilter: "all",
@@ -1794,8 +1845,17 @@
             "trade_started",
             "trade_completed",
             "trade_failed",
+            "commitment_declared",
+            "transfer_proposed",
+            "transfer_posted",
+            "escrow_opened",
+            "escrow_released",
+            "minted",
+            "burned",
             "llm_reasoning",
             "receipt_generated",
+            "receipt_issued",
+            "receipt_verified",
             "issuer_event",
             "ledger_entry",
             "escrow_event",
@@ -2113,6 +2173,18 @@
                 await Promise.allSettled([loadInfo(), loadStatus()]);
                 renderAudit();
             });
+            $("btnRefreshReceiptTimeline")?.addEventListener("click", async () => {
+                await loadReceiptRecords();
+                renderReceiptTimeline();
+            });
+            $("btnDownloadReceipts")?.addEventListener("click", downloadReceipts);
+            $("btnVerifyReceipt")?.addEventListener("click", verifyReceiptManual);
+            $("btnClearVerify")?.addEventListener("click", () => {
+                $("receiptVerifyInput").value = "";
+                setText("receiptVerifyResult", "Awaiting receipt...");
+            });
+            $("btnReplayReceipts")?.addEventListener("click", replayReceiptBundle);
+            $("btnLoadReceiptExport")?.addEventListener("click", loadReceiptExport);
 
             $("btnRunSimulation")?.addEventListener("click", runSimulation);
             $("btnApplyScenario")?.addEventListener("click", () => {
@@ -2284,6 +2356,7 @@
                 loadLedger(),
                 loadSupply(),
                 loadReceipts(),
+                loadReceiptRecords(),
                 loadActivity(),
             ]);
             state.lastRefreshAt = new Date();
@@ -2300,7 +2373,7 @@
                 await Promise.allSettled([loadLedger(), loadSupply()]);
             }
             if (state.tab === "audit") {
-                await loadActivity();
+                await Promise.allSettled([loadActivity(), loadReceiptRecords()]);
             }
             state.lastRefreshAt = new Date();
             renderAll();
@@ -2332,7 +2405,7 @@
                     await Promise.allSettled([loadLedger(), loadSupply(), loadReceipts()]);
                     renderTreasury();
                 } else if (tabName === "audit") {
-                    await Promise.allSettled([loadActivity(), loadInfo(), loadStatus()]);
+                    await Promise.allSettled([loadActivity(), loadInfo(), loadStatus(), loadReceiptRecords()]);
                     renderAudit();
                 } else if (tabName === "simulation") {
                     renderSimulation();
@@ -2417,6 +2490,78 @@
             state.receipts = data?.receipts || [];
         }
 
+        async function loadReceiptRecords() {
+            const data = await requestJSON("/api/receipts");
+            state.receiptRecords = data?.receipts || [];
+        }
+
+        async function verifyReceiptById(receiptId) {
+            try {
+                const data = await requestJSON("/api/receipts/verify", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ receipt_id: receiptId }),
+                });
+                const result = data?.result || {};
+                setText("receiptVerifyResult", JSON.stringify(result, null, 2));
+                flash(`Receipt ${shortId(receiptId, 12)} ${result.valid ? "valid" : "invalid"}.`, result.valid ? "ok" : "warn");
+            } catch (error) {
+                setText("receiptVerifyResult", `Verification failed: ${error.message}`);
+                flash(`Receipt verification failed: ${error.message}`, "bad");
+            }
+        }
+
+        function verifyReceiptManual() {
+            const receiptId = $("receiptVerifyInput")?.value?.trim();
+            if (!receiptId) {
+                flash("Enter a receipt id to verify.", "warn");
+                return;
+            }
+            verifyReceiptById(receiptId);
+        }
+
+        function downloadReceipts() {
+            window.open("/api/receipts/export", "_blank");
+        }
+
+        async function loadReceiptExport() {
+            try {
+                const resp = await fetch("/api/receipts/export");
+                if (!resp.ok) {
+                    throw new Error(`Export failed (${resp.status})`);
+                }
+                const text = await resp.text();
+                $("receiptReplayInput").value = text;
+                flash("Receipt export loaded.", "ok");
+            } catch (error) {
+                flash(`Export load failed: ${error.message}`, "bad");
+            }
+        }
+
+        async function replayReceiptBundle() {
+            const payload = $("receiptReplayInput")?.value || "";
+            if (!payload.trim()) {
+                flash("Paste receipt JSONL first.", "warn");
+                return;
+            }
+            try {
+                const response = await fetch("/api/receipts/replay", {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain" },
+                    body: payload,
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data?.message || "Replay failed");
+                }
+                setText("receiptReplayResult", JSON.stringify(data, null, 2));
+                flash("Receipt replay completed.", "ok");
+            } catch (error) {
+                setText("receiptReplayResult", `Replay failed: ${error.message}`);
+                flash(`Replay failed: ${error.message}`, "bad");
+            }
+        }
+
         async function loadActivity() {
             const data = await requestJSON("/api/system/log");
             state.activity = data?.entries || [];
@@ -2446,7 +2591,19 @@
         }
 
         function eventCategoryFromName(name) {
-            if (["trade_started", "trade_completed", "ledger_entry", "escrow_event", "issuer_event"].includes(name)) {
+            if ([
+                "trade_started",
+                "trade_completed",
+                "ledger_entry",
+                "escrow_event",
+                "issuer_event",
+                "transfer_proposed",
+                "transfer_posted",
+                "escrow_opened",
+                "escrow_released",
+                "minted",
+                "burned",
+            ].includes(name)) {
                 return "trade";
             }
             if (["trade_failed", "dispute_event", "commitment_rejected", "attention_exhausted", "capability_denied"].includes(name)) {
@@ -2455,7 +2612,17 @@
             if (["llm_reasoning", "attention_allocated", "capability_granted"].includes(name)) {
                 return "ai";
             }
-            if (["maple_runtime", "coupling_established", "coupling_strengthened", "coupling_weakened", "decoupled", "commitment_submitted", "commitment_approved", "commitment_outcome"].includes(name)) {
+            if ([
+                "maple_runtime",
+                "coupling_established",
+                "coupling_strengthened",
+                "coupling_weakened",
+                "decoupled",
+                "commitment_submitted",
+                "commitment_declared",
+                "commitment_approved",
+                "commitment_outcome",
+            ].includes(name)) {
                 return "maple";
             }
             return "system";
@@ -2471,16 +2638,34 @@
                     return `Trade settled: ${payload.service_name || "service"} ${formatMoney(payload.amount)}`;
                 case "trade_failed":
                     return `Trade failed: ${payload.reason || "unknown"}`;
+                case "commitment_declared":
+                    return `Commitment declared ${shortId(payload.commitment_id, 12)} for ${formatMoney(payload.amount)}`;
                 case "llm_reasoning":
                     return `LLM: ${payload.agent_name || payload.agent_id} ${payload.action || "reasoning"}`;
                 case "balance_updated":
                     return `Balance update: ${payload.agent_name || payload.agent_id} -> ${formatMoney(payload.new_balance)}`;
                 case "receipt_generated":
                     return `Receipt generated: ${payload.receipt_type || "receipt"} by ${payload.actor || "system"}`;
+                case "receipt_issued":
+                    return `Receipt issued: ${payload.receipt_type || "receipt"} by ${payload.actor || "system"}`;
+                case "receipt_verified":
+                    return `Receipt verified: ${payload.valid ? "valid" : "invalid"}`;
                 case "issuer_event":
                     return `Issuer ${payload.event_type || "event"}: ${formatMoney(payload.amount)}`;
+                case "minted":
+                    return `Minted: ${formatMoney(payload.amount)} to ${payload.account || "account"}`;
+                case "burned":
+                    return `Burned: ${formatMoney(payload.amount)} from ${payload.account || "account"}`;
                 case "escrow_event":
                     return `Escrow ${payload.state || "update"}: ${formatMoney(payload.amount)}`;
+                case "escrow_opened":
+                    return `Escrow opened ${shortId(payload.escrow_id, 12)}: ${formatMoney(payload.amount)}`;
+                case "escrow_released":
+                    return `Escrow released ${shortId(payload.escrow_id, 12)}: ${formatMoney(payload.amount)}`;
+                case "transfer_proposed":
+                    return `Transfer proposed: ${formatMoney(payload.amount)} ${shortId(payload.from, 8)} → ${shortId(payload.to, 8)}`;
+                case "transfer_posted":
+                    return `Transfer posted: ${formatMoney(payload.amount)} ${shortId(payload.from, 8)} → ${shortId(payload.to, 8)}`;
                 case "maple_runtime":
                     return `Runtime: ${payload.description || payload.event_type || "event"}`;
                 case "coupling_established":
@@ -2583,6 +2768,9 @@
                 "trade_failed",
                 "system_reset",
                 "issuer_event",
+                "minted",
+                "burned",
+                "transfer_posted",
                 "balance_updated",
                 "agent_state_changed",
                 "commitment_approved",
@@ -3256,9 +3444,51 @@
             `).join("");
         }
 
+        function renderReceiptTimeline() {
+            const container = $("receiptTimeline");
+            if (!container) {
+                return;
+            }
+            const receipts = state.receiptRecords || [];
+            if (receipts.length === 0) {
+                container.innerHTML = '<div class="empty">No receipts yet.</div>';
+                return;
+            }
+
+            const sorted = receipts
+                .slice()
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                .slice(0, 120);
+
+            container.innerHTML = sorted.map((record) => `
+                <div class="trace-item">
+                    <div>
+                        <div class="trace-title">${escapeHtml(record.description || record.receipt_type)}</div>
+                        <div class="trace-meta">
+                            ${escapeHtml(shortId(record.receipt_id, 16))}
+                            · ${escapeHtml(record.receipt_type || "-")}
+                            · ${escapeHtml(record.actor || "-")}
+                            · ${escapeHtml(formatTime(record.timestamp))}
+                        </div>
+                    </div>
+                    <button class="btn-soft receipt-verify-btn" data-receipt-id="${escapeHtml(record.receipt_id)}">Verify</button>
+                </div>
+            `).join("");
+
+            container.querySelectorAll(".receipt-verify-btn").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    const receiptId = btn.dataset.receiptId;
+                    if (receiptId) {
+                        verifyReceiptById(receiptId);
+                    }
+                });
+            });
+        }
+
         function renderAudit() {
             renderActivityTable();
             renderAuditEvents();
+            renderReceiptTimeline();
 
             setText("infoName", state.info?.name || "-");
             setText("infoArchitecture", state.info?.architecture || "-");
