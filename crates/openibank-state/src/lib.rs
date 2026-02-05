@@ -27,7 +27,7 @@ use openibank_core::Amount;
 use openibank_ledger::Ledger;
 use openibank_issuer::{Issuer, IssuerConfig};
 use openibank_maple::{
-    IBankRuntime, IBankRuntimeConfig, MapleResonatorAgent, AgentActivity,
+    IBankRuntime, IBankRuntimeConfig, MapleResonatorAgent,
     bridge::ResonatorAgentRole,
     IBankAccountability, TradeCouplingManager, TradeCommitmentManager,
 };
@@ -239,7 +239,7 @@ impl SystemState {
         let remaining_supply = issuer.remaining_supply().await;
 
         // Maple deep integration stats
-        let accountability_info = self.accountability.dashboard_info();
+        let accountability_info = self.accountability.dashboard_info().await;
         let coupling_summary = self.coupling_manager.dashboard_summary();
         let commitment_summary = self.commitment_manager.dashboard_summary();
 

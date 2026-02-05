@@ -12,6 +12,7 @@ openibank-ledger = { workspace = true }
 openibank-issuer = { workspace = true }
 openibank-llm = { workspace = true }
 openibank-guard = { workspace = true }
+openibank-agent-kernel = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

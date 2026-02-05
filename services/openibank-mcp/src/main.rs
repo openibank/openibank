@@ -46,7 +46,7 @@ use std::io::{self, BufRead, Write};
 use std::sync::Arc;
 
 use openibank_agents::{AgentBrain, BuyerAgent, SellerAgent, Service};
-use openibank_core::{Amount, AssetId, ResonatorId};
+use openibank_core::{Amount, AssetId, ResonatorId, EscrowId};
 use openibank_issuer::{Issuer, IssuerConfig, MintIntent};
 use openibank_ledger::Ledger;
 use serde::{Deserialize, Serialize};
@@ -86,6 +86,7 @@ impl MCPState {
 
 #[derive(Debug, Deserialize)]
 struct JsonRpcRequest {
+    #[allow(dead_code)]
     jsonrpc: String,
     id: serde_json::Value,
     method: String,
@@ -139,17 +140,20 @@ impl JsonRpcResponse {
 // MCP Protocol Types
 // ============================================================================
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct ServerInfo {
     name: String,
     version: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct ServerCapabilities {
     tools: ToolsCapability,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct ToolsCapability {
     #[serde(rename = "listChanged")]
@@ -164,6 +168,7 @@ struct Tool {
     input_schema: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct ToolResult {
     content: Vec<ToolContent>,
@@ -171,6 +176,7 @@ struct ToolResult {
     is_error: Option<bool>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 enum ToolContent {
@@ -629,7 +635,7 @@ async fn execute_trade(
             .ok_or("Seller has no services")?
     };
 
-    let service_price = {
+    let _service_price = {
         let seller = state.sellers.get(seller_id).unwrap();
         seller
             .services()
@@ -677,35 +683,57 @@ async fn execute_trade(
         buyer.accept_invoice(invoice).map_err(|e| e.to_string())?;
     }
 
-    // Pay invoice
-    let escrow_id = {
-        let buyer = state.buyers.get_mut(buyer_id).unwrap();
-        let (_, escrow) = buyer
-            .pay_invoice(&invoice_id)
-            .await
-            .map_err(|e| e.to_string())?;
-        escrow.escrow_id.clone()
-    };
-
-    // Deliver service
-    {
-        let seller = state.sellers.get_mut(seller_id).unwrap();
-        seller
-            .deliver_service(&invoice_id, "Service delivered via MCP".to_string())
-            .map_err(|e| e.to_string())?;
+    // Attach commitment context for kernel gating
+    let commitment_id = format!("mcp_commit_{}", uuid::Uuid::new_v4());
+    if let Some(buyer) = state.buyers.get_mut(buyer_id) {
+        buyer.set_active_commitment(commitment_id.clone(), true);
+    }
+    if let Some(seller) = state.sellers.get_mut(seller_id) {
+        seller.set_active_commitment(commitment_id.clone(), true);
     }
 
-    // Confirm delivery
-    let amount = {
-        let buyer = state.buyers.get_mut(buyer_id).unwrap();
-        buyer.confirm_delivery(&escrow_id).map_err(|e| e.to_string())?
-    };
+    let trade_result: Result<(EscrowId, Amount), String> = (async {
+        // Pay invoice
+        let escrow_id = {
+            let buyer = state.buyers.get_mut(buyer_id).unwrap();
+            let (_, escrow) = buyer
+                .pay_invoice(&invoice_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            escrow.escrow_id.clone()
+        };
 
-    // Receive payment
-    {
-        let seller = state.sellers.get_mut(seller_id).unwrap();
-        seller.receive_payment(amount).map_err(|e| e.to_string())?;
+        // Deliver service
+        {
+            let seller = state.sellers.get_mut(seller_id).unwrap();
+            seller
+                .deliver_service(&invoice_id, "Service delivered via MCP".to_string())
+                .map_err(|e| e.to_string())?;
+        }
+
+        // Confirm delivery
+        let amount = {
+            let buyer = state.buyers.get_mut(buyer_id).unwrap();
+            buyer.confirm_delivery(&escrow_id).map_err(|e| e.to_string())?
+        };
+
+        // Receive payment
+        {
+            let seller = state.sellers.get_mut(seller_id).unwrap();
+            seller.receive_payment(amount).map_err(|e| e.to_string())?;
+        }
+
+        Ok((escrow_id, amount))
+    }).await;
+
+    if let Some(buyer) = state.buyers.get_mut(buyer_id) {
+        buyer.clear_active_commitment();
     }
+    if let Some(seller) = state.sellers.get_mut(seller_id) {
+        seller.clear_active_commitment();
+    }
+
+    let (_escrow_id, amount) = trade_result?;
 
     state.trade_count += 1;
 
@@ -720,7 +748,7 @@ async fn execute_trade(
         Seller {} new balance: ${:.2}\n\n\
         Total trades: {}",
         service_name,
-        service_price as f64 / 100.0,
+        amount.0 as f64 / 100.0,
         buyer_id,
         buyer_balance as f64 / 100.0,
         seller_id,
@@ -743,7 +771,7 @@ async fn mint_funds(
         .and_then(|a| a.as_u64())
         .ok_or("Missing 'amount' parameter")?;
 
-    let mut state = state.write().await;
+    let state = state.write().await;
 
     // Check if agent exists
     let is_buyer = state.buyers.contains_key(agent_id);

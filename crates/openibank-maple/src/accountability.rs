@@ -139,7 +139,7 @@ impl IBankAccountability {
     /// 3. Evaluate against policies (risk, limits, etc.)
     /// 4. Adjudicate (approve/deny)
     /// 5. Record in accountability ledger
-    pub fn submit_trade_commitment(
+    pub async fn submit_trade_commitment(
         &self,
         buyer_identity: &IdentityRef,
         seller_name: &str,
@@ -153,19 +153,19 @@ impl IBankAccountability {
             service_name,
         )?;
 
-        self.aas.submit_commitment(commitment)
+        self.aas.submit_commitment(commitment).await
     }
 
     /// Record that trade execution has started
-    pub fn record_trade_started(
+    pub async fn record_trade_started(
         &self,
         commitment_id: &CommitmentId,
     ) -> Result<(), AasError> {
-        self.aas.record_execution_started(commitment_id)
+        self.aas.record_execution_started(commitment_id).await
     }
 
     /// Record the trade outcome (success or failure)
-    pub fn record_trade_outcome(
+    pub async fn record_trade_outcome(
         &self,
         commitment_id: &CommitmentId,
         success: bool,
@@ -176,7 +176,7 @@ impl IBankAccountability {
             description: details.to_string(),
             completed_at: chrono::Utc::now(),
         };
-        self.aas.record_outcome(commitment_id, outcome)
+        self.aas.record_outcome(commitment_id, outcome).await
     }
 
     // ========================================================================
@@ -184,32 +184,32 @@ impl IBankAccountability {
     // ========================================================================
 
     /// Get an agent's accountability history
-    pub fn agent_history(
+    pub async fn agent_history(
         &self,
         agent_id: &AgentId,
     ) -> Result<Vec<LedgerEntry>, AasError> {
-        self.aas.get_agent_history(agent_id)
+        self.aas.get_agent_history(agent_id).await
     }
 
     /// Get a specific commitment entry
-    pub fn get_commitment(
+    pub async fn get_commitment(
         &self,
         commitment_id: &CommitmentId,
     ) -> Result<Option<LedgerEntry>, AasError> {
-        self.aas.get_commitment(commitment_id)
+        self.aas.get_commitment(commitment_id).await
     }
 
     /// Query the accountability ledger
-    pub fn query_ledger(
+    pub async fn query_ledger(
         &self,
         query: LedgerQuery,
     ) -> Result<Vec<LedgerEntry>, AasError> {
-        self.aas.query_ledger(query)
+        self.aas.query_ledger(query).await
     }
 
     /// Get overall accountability statistics
-    pub fn statistics(&self) -> Result<LedgerStatistics, AasError> {
-        self.aas.statistics()
+    pub async fn statistics(&self) -> Result<LedgerStatistics, AasError> {
+        self.aas.statistics().await
     }
 
     /// Get items pending human review
@@ -348,8 +348,8 @@ pub struct AccountabilityInfo {
 
 impl IBankAccountability {
     /// Get accountability info for dashboard
-    pub fn dashboard_info(&self) -> AccountabilityInfo {
-        let stats = self.statistics().unwrap_or(LedgerStatistics {
+    pub async fn dashboard_info(&self) -> AccountabilityInfo {
+        let stats = self.statistics().await.unwrap_or(LedgerStatistics {
             total_commitments: 0,
             by_status: HashMap::new(),
             successful_executions: 0,
@@ -371,8 +371,8 @@ impl IBankAccountability {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_register_and_grant() {
+    #[tokio::test]
+    async fn test_register_and_grant() {
         let accountability = IBankAccountability::new();
 
         let agent = accountability
@@ -388,8 +388,8 @@ mod tests {
         assert!(!grants.is_empty());
     }
 
-    #[test]
-    fn test_full_trade_commitment_flow() {
+    #[tokio::test]
+    async fn test_full_trade_commitment_flow() {
         let accountability = IBankAccountability::new();
 
         // Register buyer
@@ -410,6 +410,7 @@ mod tests {
                 10000, // $100.00
                 "Data Analysis",
             )
+            .await
             .expect("submit commitment");
 
         // Finance domain defaults to PendingHumanReview in Maple's default policies.
@@ -420,14 +421,15 @@ mod tests {
         // The commitment is now recorded in the ledger regardless of decision
         let entry = accountability
             .get_commitment(&commitment_id)
+            .await
             .expect("get commitment");
         assert!(entry.is_some(), "Commitment should be in ledger");
     }
 
-    #[test]
-    fn test_dashboard_info() {
+    #[tokio::test]
+    async fn test_dashboard_info() {
         let accountability = IBankAccountability::new();
-        let info = accountability.dashboard_info();
+        let info = accountability.dashboard_info().await;
         assert_eq!(info.total_commitments, 0);
     }
 }

@@ -19,8 +19,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{Path, Query, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{
         sse::{Event, Sse},
         Html, IntoResponse,
@@ -36,9 +36,9 @@ use openibank_issuer::MintIntent;
 use openibank_llm::LLMRouter;
 use openibank_maple::{
     MapleResonatorAgent,
-    bridge::ResonatorAgentRole,
+    bridge::{AgentPresenceState, ResonatorAgentRole},
     attention::AttentionManager,
-    AgentId, IdentityRef,
+    IdentityRef,
 };
 use openibank_state::{
     SystemState, SystemEvent,
@@ -100,6 +100,9 @@ async fn main() {
         .route("/api/agents", get(list_agents))
         .route("/api/agents/{id}", get(get_agent))
         .route("/api/agents/{id}/activity", get(get_agent_activity))
+        .route("/api/agents/{id}/kernel-trace", get(get_agent_kernel_trace))
+        .route("/api/agents/{id}/fund", post(fund_agent))
+        .route("/api/agents/{id}/presence", post(set_agent_presence))
         .route("/api/agents/buyer", post(create_buyer))
         .route("/api/agents/seller", post(create_seller))
         // Trading
@@ -175,8 +178,12 @@ async fn get_status(State(state): State<Arc<SystemState>>) -> Json<serde_json::V
         "issuer": {
             "total_supply": summary.total_supply,
             "remaining_supply": summary.remaining_supply,
-            "total_supply_display": format!("${:.2}", summary.total_supply as f64 / 100.0)
+            "total_supply_display": format!("${:.2}", summary.total_supply as f64 / 100.0),
+            "remaining_supply_display": format!("${:.2}", summary.remaining_supply as f64 / 100.0)
         },
+        "maple_accountability": summary.maple_accountability,
+        "maple_couplings": summary.maple_couplings,
+        "maple_commitments": summary.maple_commitments,
         "uptime_seconds": summary.uptime_seconds,
         "started_at": summary.started_at
     }))
@@ -225,6 +232,221 @@ async fn get_agent_activity(
         "agent_id": id,
         "entries": entries,
         "count": entries.len()
+    })))
+}
+
+#[derive(Deserialize)]
+struct KernelTraceQuery {
+    download: Option<bool>,
+}
+
+async fn get_agent_kernel_trace(
+    State(state): State<Arc<SystemState>>,
+    Path(id): Path<String>,
+    Query(query): Query<KernelTraceQuery>,
+) -> Result<axum::response::Response, AppError> {
+    let registry = state.agents.read().await;
+    let agent = registry.agents.get(&id)
+        .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", id)))?;
+
+    let trace = agent
+        .kernel_trace()
+        .ok_or_else(|| AppError::Internal("Kernel trace not available".to_string()))?;
+
+    if query.download.unwrap_or(false) {
+        let body = serde_json::to_string_pretty(trace)
+            .map_err(|e| AppError::Internal(format!("Trace serialization failed: {}", e)))?;
+        let mut headers = HeaderMap::new();
+        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        let filename = format!("attachment; filename=\"kernel-trace-{}.json\"", id);
+        headers.insert(
+            header::CONTENT_DISPOSITION,
+            HeaderValue::from_str(&filename).unwrap_or_else(|_| HeaderValue::from_static("attachment")),
+        );
+        return Ok((headers, body).into_response());
+    }
+
+    Ok(Json(trace).into_response())
+}
+
+#[derive(Deserialize)]
+struct FundAgentRequest {
+    amount: u64,
+}
+
+async fn fund_agent(
+    State(state): State<Arc<SystemState>>,
+    Path(id): Path<String>,
+    Json(req): Json<FundAgentRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if req.amount == 0 {
+        return Err(AppError::Internal("Funding amount must be > 0".to_string()));
+    }
+
+    // Validate target agent exists and supports wallets.
+    {
+        let registry = state.agents.read().await;
+        let Some(agent) = registry.agents.get(&id) else {
+            return Err(AppError::NotFound(format!("Agent {} not found", id)));
+        };
+        if agent.role() == ResonatorAgentRole::Arbiter || agent.role() == ResonatorAgentRole::Issuer {
+            return Err(AppError::Internal(
+                "This agent role does not support wallet funding".to_string()
+            ));
+        }
+    }
+
+    // Mint against issuer supply controls first.
+    let mint = MintIntent::new(
+        ResonatorId::from_string(&id),
+        Amount::new(req.amount),
+        "Manual treasury top-up",
+    );
+    {
+        let issuer = state.issuer.read().await;
+        issuer
+            .mint(mint)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+    }
+
+    // Then credit the local wallet view for this agent.
+    let (agent_name, old_balance, new_balance, info) = {
+        let mut registry = state.agents.write().await;
+        let agent = registry
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", id)))?;
+
+        let old_balance = agent.balance().map(|a| a.0).unwrap_or(0);
+        let iusd = AssetId::iusd();
+
+        match agent.role() {
+            ResonatorAgentRole::Buyer => {
+                agent
+                    .as_buyer_mut()
+                    .ok_or_else(|| AppError::Internal("Buyer agent unavailable".to_string()))?
+                    .wallet_mut()
+                    .credit(&iusd, Amount::new(req.amount))
+                    .map_err(|e| AppError::Internal(e.to_string()))?;
+            }
+            ResonatorAgentRole::Seller => {
+                agent
+                    .as_seller_mut()
+                    .ok_or_else(|| AppError::Internal("Seller agent unavailable".to_string()))?
+                    .wallet_mut()
+                    .credit(&iusd, Amount::new(req.amount))
+                    .map_err(|e| AppError::Internal(e.to_string()))?;
+            }
+            ResonatorAgentRole::Arbiter => {
+                return Err(AppError::Internal(
+                    "Arbiter agents do not support wallet funding".to_string()
+                ));
+            }
+            ResonatorAgentRole::Issuer => {
+                return Err(AppError::Internal(
+                    "Issuer agents do not support wallet funding".to_string()
+                ));
+            }
+        }
+
+        let new_balance = agent.balance().map(|a| a.0).unwrap_or(0);
+        agent.log_balance_change(format!(
+            "Manual top-up ${:.2}",
+            req.amount as f64 / 100.0
+        ));
+
+        (
+            agent.name.clone(),
+            old_balance,
+            new_balance,
+            agent.to_api_info(),
+        )
+    };
+
+    state.emit_event(SystemEvent::BalanceUpdated {
+        agent_id: id.clone(),
+        agent_name: agent_name.clone(),
+        old_balance,
+        new_balance,
+        reason: format!("Manual top-up ${:.2}", req.amount as f64 / 100.0),
+        timestamp: Utc::now(),
+    });
+
+    state.log_activity(
+        openibank_state::activity::ActivityEntry::iusd_minted(&id, req.amount)
+    ).await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "agent": info,
+        "funded_amount": req.amount,
+        "funded_display": format!("${:.2}", req.amount as f64 / 100.0)
+    })))
+}
+
+#[derive(Deserialize)]
+struct SetAgentPresenceRequest {
+    state: String,
+}
+
+fn parse_presence_state(value: &str) -> Option<AgentPresenceState> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "idle" | "resume" | "active" => Some(AgentPresenceState::Idle),
+        "trading" => Some(AgentPresenceState::Trading),
+        "thinkingllm" | "thinking_llm" | "thinking" => Some(AgentPresenceState::ThinkingLLM),
+        "waitingescrow" | "waiting_escrow" | "escrow" => Some(AgentPresenceState::WaitingEscrow),
+        "resolvingdispute" | "resolving_dispute" | "dispute" => Some(AgentPresenceState::ResolvingDispute),
+        "suspended" | "suspend" => Some(AgentPresenceState::Suspended),
+        _ => None,
+    }
+}
+
+async fn set_agent_presence(
+    State(state): State<Arc<SystemState>>,
+    Path(id): Path<String>,
+    Json(req): Json<SetAgentPresenceRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let new_state = parse_presence_state(&req.state)
+        .ok_or_else(|| AppError::Internal(format!("Unsupported presence state '{}'", req.state)))?;
+
+    // Remove the agent temporarily so we don't hold the write lock across await.
+    let mut agent = {
+        let mut registry = state.agents.write().await;
+        registry
+            .agents
+            .remove(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Agent {} not found", id)))?
+    };
+
+    let old_state = agent.presence.clone();
+    agent.set_presence(new_state.clone()).await;
+    let info = agent.to_api_info();
+    let agent_name = agent.name.clone();
+
+    {
+        let mut registry = state.agents.write().await;
+        registry.agents.insert(id.clone(), agent);
+    }
+
+    state.emit_event(SystemEvent::AgentStateChanged {
+        agent_id: id.clone(),
+        old_state: format!("{:?}", old_state),
+        new_state: format!("{:?}", new_state),
+        timestamp: Utc::now(),
+    });
+
+    state.log_activity(
+        openibank_state::activity::ActivityEntry::info(
+            agent_name.clone(),
+            openibank_state::activity::ActivityCategory::AgentLifecycle,
+            format!("Presence updated: {:?} -> {:?}", old_state, new_state),
+        ),
+    ).await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "agent": info
     })))
 }
 
@@ -487,7 +709,7 @@ async fn execute_trade_internal(
     // ================================================================
     // Phase 1: Validate agents and get service info
     // ================================================================
-    let (service_name, service_price, buyer_name, seller_name, buyer_has_handle) = {
+    let (service_name, service_price, buyer_name, seller_name, _buyer_has_handle) = {
         let registry = state.agents.read().await;
 
         if !registry.agents.contains_key(buyer_id) {
@@ -617,7 +839,7 @@ async fn execute_trade_internal(
                 match state.commitment_manager.submit_and_track(
                     &state.accountability,
                     commitment,
-                ) {
+                ).await {
                     Ok(decision) => {
                         if decision.decision.allows_execution() {
                             state.emit_event(SystemEvent::CommitmentApproved {
@@ -647,7 +869,7 @@ async fn execute_trade_internal(
                 let _ = state.commitment_manager.record_execution_started(
                     &state.accountability,
                     &cid,
-                );
+                ).await;
 
                 Some(cid)
             }
@@ -671,6 +893,14 @@ async fn execute_trade_internal(
     });
 
     let mut registry = state.agents.write().await;
+    if let Some(ref cid) = commitment_id {
+        if let Some(buyer) = registry.agents.get_mut(buyer_id) {
+            buyer.set_active_commitment(cid.clone(), true);
+        }
+        if let Some(seller) = registry.agents.get_mut(seller_id) {
+            seller.set_active_commitment(cid.clone(), true);
+        }
+    }
 
     // Get offer from seller
     let offer = {
@@ -685,7 +915,7 @@ async fn execute_trade_internal(
             if let Some(ref cid) = commitment_id {
                 let _ = state.commitment_manager.record_outcome(
                     &state.accountability, cid, false, "No offer available",
-                );
+                ).await;
             }
             state.emit_event(SystemEvent::TradeFailed {
                 trade_id: trade_id.clone(),
@@ -706,9 +936,9 @@ async fn execute_trade_internal(
 
     if !can_afford {
         if let Some(ref cid) = commitment_id {
-            let _ = state.commitment_manager.record_outcome(
-                &state.accountability, cid, false, "Buyer cannot afford",
-            );
+        let _ = state.commitment_manager.record_outcome(
+            &state.accountability, cid, false, "Buyer cannot afford",
+        ).await;
         }
         state.emit_event(SystemEvent::TradeFailed {
             trade_id: trade_id.clone(),
@@ -788,7 +1018,7 @@ async fn execute_trade_internal(
             true,
             &format!("Trade completed: {} bought '{}' from {} for ${:.2}",
                 buyer_name, service_name, seller_name, amount.0 as f64 / 100.0),
-        );
+        ).await;
         state.emit_event(SystemEvent::CommitmentOutcomeRecorded {
             commitment_id: cid.clone(),
             success: true,
@@ -832,6 +1062,14 @@ async fn execute_trade_internal(
             None,
         );
         seller.log_balance_change(format!("Balance: ${:.2}", seller.balance().unwrap_or(Amount::zero()).0 as f64 / 100.0));
+    }
+
+    // Clear active commitment context after trade completion
+    if let Some(buyer) = registry.agents.get_mut(buyer_id) {
+        buyer.clear_active_commitment();
+    }
+    if let Some(seller) = registry.agents.get_mut(seller_id) {
+        seller.clear_active_commitment();
     }
 
     // Update registry stats

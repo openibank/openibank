@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/openibank-agent-kernel",
     "crates/openibank-core",
     "crates/openibank-ledger",
     "crates/openibank-issuer",
@@ -77,7 +78,7 @@ dotenvy = "0.15"
 
 # Maple AI Framework (Resonance Architecture)
 maple-runtime = { path = "../maple/crates/maple-runtime" }
-resonator-types = { path = "../maple/crates/resonator-types" }
+resonator-types = { path = "../maple/crates/resonator/types" }
 rcf-types = { path = "../maple/crates/rcf-types" }
 rcf-commitment = { path = "../maple/crates/rcf-commitment" }
 aas-types = { path = "../maple/crates/aas-types" }
@@ -89,10 +90,10 @@ aas-adjudication = { path = "../maple/crates/aas-adjudication" }
 aas-ledger = { path = "../maple/crates/aas-ledger" }
 
 # PALM Fleet Orchestration (Maple)
-palm-types = { path = "../maple/crates/palm-types" }
-palm-registry = { path = "../maple/crates/palm-registry" }
-palm-deployment = { path = "../maple/crates/palm-deployment" }
-palm-health = { path = "../maple/crates/palm-health" }
+palm-types = { path = "../maple/crates/palm/types" }
+palm-registry = { path = "../maple/crates/palm/registry" }
+palm-deployment = { path = "../maple/crates/palm/deployment" }
+palm-health = { path = "../maple/crates/palm/health" }
 
 # UAL Universal Agent Language (Maple)
 ual-types = { path = "../maple/crates/ual-types" }
@@ -104,6 +105,7 @@ openibank-core = { path = "crates/openibank-core" }
 openibank-ledger = { path = "crates/openibank-ledger" }
 openibank-issuer = { path = "crates/openibank-issuer" }
 openibank-llm = { path = "crates/openibank-llm" }
+openibank-agent-kernel = { path = "crates/openibank-agent-kernel" }
 openibank-agents = { path = "crates/openibank-agents" }
 openibank-guard = { path = "crates/openibank-guard" }
 openibank-receipts = { path = "crates/openibank-receipts" }

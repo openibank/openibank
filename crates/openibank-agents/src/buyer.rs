@@ -19,7 +19,11 @@ use openibank_ledger::Ledger;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::brain::{AgentBrain, PaymentContext};
+use crate::brain::AgentBrain;
+use openibank_agent_kernel::{
+    AgentKernel, CapabilitySet, Contract, ContractSet, DeterministicPolicy, KernelAction,
+    KernelConfig, KernelMode, ProposalRequest,
+};
 
 /// Errors that can occur in buyer operations
 #[derive(Error, Debug)]
@@ -38,6 +42,9 @@ pub enum BuyerError {
 
     #[error("Invalid invoice: {reason}")]
     InvalidInvoice { reason: String },
+
+    #[error("Kernel error: {0}")]
+    KernelError(String),
 }
 
 pub type Result<T> = std::result::Result<T, BuyerError>;
@@ -61,7 +68,7 @@ pub struct ServiceOffer {
 pub struct BuyerAgent {
     id: ResonatorId,
     wallet: Wallet,
-    brain: AgentBrain,
+    kernel: AgentKernel,
     #[allow(dead_code)] // Reserved for future ledger integration
     ledger: Arc<Ledger>,
     pending_invoices: Vec<Invoice>,
@@ -70,23 +77,44 @@ pub struct BuyerAgent {
 impl BuyerAgent {
     /// Create a new buyer agent
     pub fn new(id: ResonatorId, ledger: Arc<Ledger>) -> Self {
-        let wallet = Wallet::new(id.clone());
-        Self {
-            id,
-            wallet,
-            brain: AgentBrain::deterministic(),
-            ledger,
-            pending_invoices: Vec::new(),
-        }
+        let brain = AgentBrain::deterministic();
+        Self::with_brain(id, ledger, brain)
     }
 
     /// Create with LLM brain
     pub fn with_brain(id: ResonatorId, ledger: Arc<Ledger>, brain: AgentBrain) -> Self {
         let wallet = Wallet::new(id.clone());
+        let mode = match brain.mode() {
+            crate::brain::BrainMode::Deterministic => KernelMode::Deterministic,
+            crate::brain::BrainMode::LLM => KernelMode::Llm,
+        };
+        let capabilities = CapabilitySet::from_attested([
+            "payment.initiate",
+            "wallet.permit.issue",
+            "escrow.lock",
+            "escrow.release",
+        ]);
+        let contracts = ContractSet::new(vec![Contract {
+            name: "buyer_contract".to_string(),
+            max_spend: None,
+            allowed_assets: vec!["IUSD".to_string()],
+            require_reversible: true,
+            allowed_outcomes: vec![],
+        }]);
+        let kernel = AgentKernel::new(KernelConfig {
+            agent_id: id.0.clone(),
+            role: "buyer".to_string(),
+            mode,
+            proposer: Box::new(brain),
+            policy: Box::new(DeterministicPolicy::default()),
+            capabilities,
+            contracts,
+            trace_max_entries: Some(1000),
+        });
         Self {
             id,
             wallet,
-            brain,
+            kernel,
             ledger,
             pending_invoices: Vec::new(),
         }
@@ -107,6 +135,21 @@ impl BuyerAgent {
         &mut self.wallet
     }
 
+    /// Access kernel trace (for audit/replay)
+    pub fn kernel_trace(&self) -> &openibank_agent_kernel::KernelTrace {
+        self.kernel.trace()
+    }
+
+    /// Set an active commitment context for gating
+    pub fn set_active_commitment(&mut self, commitment_id: impl Into<String>, approved: bool) {
+        self.kernel.set_active_commitment(commitment_id, approved);
+    }
+
+    /// Clear active commitment context
+    pub fn clear_active_commitment(&mut self) {
+        self.kernel.clear_active_commitment();
+    }
+
     /// Set up the buyer with initial funds and budget
     pub fn setup(&mut self, initial_funds: Amount, budget_max: Amount) -> Result<()> {
         // Credit initial funds
@@ -115,6 +158,11 @@ impl BuyerAgent {
         // Set up budget policy
         let budget = BudgetPolicy::new(self.id.clone(), budget_max);
         self.wallet.set_budget(budget)?;
+
+        // Update contract spend cap from budget
+        if let Some(contract) = self.kernel.contracts_mut().contracts_mut().first_mut() {
+            contract.max_spend = Some(budget_max.0);
+        }
 
         Ok(())
     }
@@ -175,14 +223,16 @@ impl BuyerAgent {
         let invoice = self.pending_invoices.remove(invoice_idx);
 
         // Use brain to propose payment details
-        let context = PaymentContext {
-            seller_id: invoice.seller.0.clone(),
-            service_description: invoice.description.clone(),
-            price: invoice.amount.0,
-            available_budget: self.remaining_budget().0,
-        };
-
-        let proposal = self.brain.propose_payment(&context).await;
+        let proposal = self
+            .kernel
+            .propose_payment(ProposalRequest::Payment {
+                seller_id: invoice.seller.0.clone(),
+                service_description: invoice.description.clone(),
+                price: invoice.amount.0,
+                available_budget: self.remaining_budget().0,
+            })
+            .await
+            .map_err(|e| BuyerError::KernelError(e.to_string()))?;
 
         // Issue a permit for this payment
         let permit = self.wallet.issue_permit(
@@ -220,6 +270,20 @@ impl BuyerAgent {
 
     /// Confirm delivery and release escrow
     pub fn confirm_delivery(&mut self, escrow_id: &EscrowId) -> Result<Amount> {
+        let escrow = self
+            .wallet
+            .get_escrow(escrow_id)
+            .ok_or_else(|| BuyerError::EscrowNotFound {
+                escrow_id: escrow_id.0.clone(),
+            })?;
+
+        self.kernel
+            .authorize_action(KernelAction::ReleaseEscrow {
+                amount: escrow.amount.0,
+                asset: escrow.asset.0.clone(),
+            })
+            .map_err(|e| BuyerError::KernelError(e.to_string()))?;
+
         // Mark condition as met
         self.wallet.update_escrow_conditions(escrow_id, 0, true)?;
 
@@ -332,6 +396,7 @@ mod tests {
 
         let invoice_id = invoice.invoice_id.clone();
         buyer.accept_invoice(invoice).unwrap();
+        buyer.set_active_commitment("test_commitment", true);
 
         let (permit, escrow) = buyer.pay_invoice(&invoice_id).await.unwrap();
 

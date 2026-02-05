@@ -11,6 +11,7 @@ use openibank_core::{Amount, AssetId, ResonatorId};
 use openibank_issuer::{Issuer, IssuerConfig, MintIntent};
 use openibank_ledger::Ledger;
 use openibank_llm::LLMRouter;
+use uuid::Uuid;
 
 /// Run the full viral demo - complete asset cycle
 pub async fn run_full_demo(
@@ -220,6 +221,10 @@ pub async fn run_full_demo(
     println!("  {} This is where accountability begins", "→".bright_blue());
     println!();
 
+    let commitment_id = format!("demo_commit_{}", Uuid::new_v4());
+    buyer.set_active_commitment(commitment_id.clone(), true);
+    seller.set_active_commitment(commitment_id.clone(), true);
+
     let (permit, escrow) = buyer.pay_invoice(&invoice.invoice_id).await?;
 
     println!("  {} SpendPermit issued", "✓".bright_green());
@@ -263,6 +268,7 @@ pub async fn run_full_demo(
     println!("{}", "━".repeat(70).bright_black());
 
     let case = arbiter.open_case(&escrow, None, Some(delivery_proof.clone()));
+    arbiter.set_active_commitment(commitment_id.clone(), true);
     let decision = arbiter.decide(&case.case_id).await?;
 
     println!("  {} Arbiter reviewed case", "✓".bright_green());
@@ -280,6 +286,9 @@ pub async fn run_full_demo(
 
     let released_amount = buyer.confirm_delivery(&escrow.escrow_id)?;
     seller.receive_payment(released_amount)?;
+    buyer.clear_active_commitment();
+    seller.clear_active_commitment();
+    arbiter.clear_active_commitment();
 
     println!("  {} Escrow released: {}", "✓".bright_green(), format!("{}", released_amount).bright_cyan());
     println!("  {} Payment received by seller", "✓".bright_green());
@@ -601,16 +610,26 @@ pub async fn run_interactive_demo(num_trades: u32) -> anyhow::Result<()> {
                     .await?;
 
                 if buyers[buyer_idx].accept_invoice(invoice.clone()).is_ok() {
+                    let commitment_id = format!("sim_commit_{}", Uuid::new_v4());
+                    buyers[buyer_idx].set_active_commitment(commitment_id.clone(), true);
+                    sellers[seller_idx].set_active_commitment(commitment_id.clone(), true);
+
                     if let Ok((_, escrow)) = buyers[buyer_idx].pay_invoice(&invoice.invoice_id).await {
                         sellers[seller_idx].deliver_service(&invoice.invoice_id, "Delivered".to_string())?;
 
                         if let Ok(amount) = buyers[buyer_idx].confirm_delivery(&escrow.escrow_id) {
                             sellers[seller_idx].receive_payment(amount)?;
+                            buyers[buyer_idx].clear_active_commitment();
+                            sellers[seller_idx].clear_active_commitment();
                             successful_trades += 1;
                         } else {
+                            buyers[buyer_idx].clear_active_commitment();
+                            sellers[seller_idx].clear_active_commitment();
                             failed_trades += 1;
                         }
                     } else {
+                        buyers[buyer_idx].clear_active_commitment();
+                        sellers[seller_idx].clear_active_commitment();
                         failed_trades += 1;
                     }
                 } else {

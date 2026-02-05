@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use openibank_core::{Amount, ResonatorId, Wallet};
 use openibank_agents::{AgentBrain, BuyerAgent, SellerAgent, ArbiterAgent, Service};
+use openibank_agent_kernel::KernelTrace;
 use openibank_ledger::Ledger;
 
 use crate::bridge::{ResonatorAgentRole, AgentPresenceState, build_resonator_profile};
@@ -201,6 +202,33 @@ impl AgentInner {
         match self {
             AgentInner::Seller(a) => a.services().iter().collect(),
             _ => vec![],
+        }
+    }
+
+    /// Get kernel trace (if supported)
+    pub fn kernel_trace(&self) -> Option<&KernelTrace> {
+        match self {
+            AgentInner::Buyer(a) => Some(a.kernel_trace()),
+            AgentInner::Seller(a) => Some(a.kernel_trace()),
+            AgentInner::Arbiter(a) => Some(a.kernel_trace()),
+        }
+    }
+
+    /// Set active commitment context for gating
+    pub fn set_active_commitment(&mut self, commitment_id: impl Into<String>, approved: bool) {
+        match self {
+            AgentInner::Buyer(a) => a.set_active_commitment(commitment_id, approved),
+            AgentInner::Seller(a) => a.set_active_commitment(commitment_id, approved),
+            AgentInner::Arbiter(a) => a.set_active_commitment(commitment_id, approved),
+        }
+    }
+
+    /// Clear active commitment context
+    pub fn clear_active_commitment(&mut self) {
+        match self {
+            AgentInner::Buyer(a) => a.clear_active_commitment(),
+            AgentInner::Seller(a) => a.clear_active_commitment(),
+            AgentInner::Arbiter(a) => a.clear_active_commitment(),
         }
     }
 }
@@ -474,6 +502,21 @@ impl MapleResonatorAgent {
         &self.activity
     }
 
+    /// Get kernel trace (if available)
+    pub fn kernel_trace(&self) -> Option<&KernelTrace> {
+        self.agent.kernel_trace()
+    }
+
+    /// Set active commitment for kernel gate
+    pub fn set_active_commitment(&mut self, commitment_id: impl Into<String>, approved: bool) {
+        self.agent.set_active_commitment(commitment_id, approved);
+    }
+
+    /// Clear active commitment for kernel gate
+    pub fn clear_active_commitment(&mut self) {
+        self.agent.clear_active_commitment();
+    }
+
     // ========================================================================
     // Serialization (for API/Dashboard)
     // ========================================================================
@@ -496,6 +539,7 @@ impl MapleResonatorAgent {
             created_at: self.created_at,
             has_resonator: self.resonator_handle.is_some(),
             recent_activity: self.activity.recent(10).to_vec(),
+            kernel_trace_events: self.kernel_trace().map(|t| t.events.len()).unwrap_or(0),
         }
     }
 }
@@ -518,6 +562,7 @@ pub struct AgentApiInfo {
     pub created_at: DateTime<Utc>,
     pub has_resonator: bool,
     pub recent_activity: Vec<ActivityEntry>,
+    pub kernel_trace_events: usize,
 }
 
 /// Service info for API responses

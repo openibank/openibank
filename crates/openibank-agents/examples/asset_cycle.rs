@@ -17,6 +17,7 @@ use openibank_core::{Amount, AssetId, ResonatorId};
 use openibank_issuer::{Issuer, IssuerConfig, MintIntent};
 use openibank_ledger::Ledger;
 use openibank_llm::LLMRouter;
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() {
@@ -176,6 +177,11 @@ async fn main() {
     println!(" Step 6: Payment via Escrow");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
+    let commitment_id = format!("example_commit_{}", Uuid::new_v4());
+    buyer.set_active_commitment(commitment_id.clone(), true);
+    seller.set_active_commitment(commitment_id.clone(), true);
+    arbiter.set_active_commitment(commitment_id.clone(), true);
+
     let (permit, escrow) = buyer.pay_invoice(&invoice.invoice_id).await.unwrap();
 
     println!("  ✓ SpendPermit issued");
@@ -246,6 +252,10 @@ async fn main() {
     println!("  ✓ Payment received by seller");
     println!();
 
+    buyer.clear_active_commitment();
+    seller.clear_active_commitment();
+    arbiter.clear_active_commitment();
+
     // =========================================================================
     // Final Summary
     // =========================================================================
@@ -283,9 +293,9 @@ async fn main() {
     // =========================================================================
     println!("╔══════════════════════════════════════════════════════════════════════╗");
     println!("║                                                                      ║");
-    println!("║   ✓ Complete Asset Cycle Demonstrated Successfully!                  ║");
+    println!("║   >> Complete Asset Cycle Demonstrated Successfully!                 ║");
     println!("║                                                                      ║");
-    println!("║   Flow: Mint → Budget → Permit → Escrow → Delivery → Release         ║");
+    println!("║   Flow: Mint > Budget > Permit > Escrow > Delivery > Release         ║");
     println!("║                                                                      ║");
     println!("║   All transactions produced verifiable receipts.                     ║");
     println!("║   All spending was bounded by budgets and permits.                   ║");

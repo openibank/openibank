@@ -27,6 +27,7 @@ openibank-issuer = { workspace = true }
 openibank-agents = { workspace = true }
 openibank-llm = { workspace = true }
 openibank-guard = { workspace = true }
+openibank-agent-kernel = { workspace = true }
 
 # Shared deps
 serde = { workspace = true }

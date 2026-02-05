@@ -188,10 +188,10 @@ fn compare_json_values(v1: &serde_json::Value, v2: &serde_json::Value, path: &st
                     (Some(val1), Some(val2)) => {
                         compare_json_values(val1, val2, &new_path);
                     }
-                    (Some(val1), None) => {
+                    (Some(_val1), None) => {
                         println!("    {} {} (only in first)", "−".bright_red(), new_path.bright_red());
                     }
-                    (None, Some(val2)) => {
+                    (None, Some(_val2)) => {
                         println!("    {} {} (only in second)", "+".bright_green(), new_path.bright_green());
                     }
                     (None, None) => unreachable!(),

@@ -16,7 +16,11 @@ use openibank_ledger::Ledger;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::brain::{AgentBrain, InvoiceContext};
+use crate::brain::AgentBrain;
+use openibank_agent_kernel::{
+    AgentKernel, CapabilitySet, Contract, ContractSet, DeterministicPolicy, KernelAction,
+    KernelConfig, KernelMode, ProposalRequest,
+};
 use crate::buyer::ServiceOffer;
 
 /// Errors that can occur in seller operations
@@ -30,6 +34,9 @@ pub enum SellerError {
 
     #[error("Invoice not found: {invoice_id}")]
     InvoiceNotFound { invoice_id: String },
+
+    #[error("Kernel error: {0}")]
+    KernelError(String),
 }
 
 pub type Result<T> = std::result::Result<T, SellerError>;
@@ -62,7 +69,7 @@ pub struct DeliveryProof {
 pub struct SellerAgent {
     id: ResonatorId,
     wallet: Wallet,
-    brain: AgentBrain,
+    kernel: AgentKernel,
     #[allow(dead_code)] // Reserved for future ledger integration
     ledger: Arc<Ledger>,
     services: Vec<Service>,
@@ -73,25 +80,43 @@ pub struct SellerAgent {
 impl SellerAgent {
     /// Create a new seller agent
     pub fn new(id: ResonatorId, ledger: Arc<Ledger>) -> Self {
-        let wallet = Wallet::new(id.clone());
-        Self {
-            id,
-            wallet,
-            brain: AgentBrain::deterministic(),
-            ledger,
-            services: Vec::new(),
-            issued_invoices: Vec::new(),
-            deliveries: Vec::new(),
-        }
+        let brain = AgentBrain::deterministic();
+        Self::with_brain(id, ledger, brain)
     }
 
     /// Create with LLM brain
     pub fn with_brain(id: ResonatorId, ledger: Arc<Ledger>, brain: AgentBrain) -> Self {
         let wallet = Wallet::new(id.clone());
+        let mode = match brain.mode() {
+            crate::brain::BrainMode::Deterministic => KernelMode::Deterministic,
+            crate::brain::BrainMode::LLM => KernelMode::Llm,
+        };
+        let capabilities = CapabilitySet::from_attested([
+            "invoice.issue",
+            "service.deliver",
+            "payment.receive",
+        ]);
+        let contracts = ContractSet::new(vec![Contract {
+            name: "seller_contract".to_string(),
+            max_spend: None,
+            allowed_assets: vec!["IUSD".to_string()],
+            require_reversible: false,
+            allowed_outcomes: vec![],
+        }]);
+        let kernel = AgentKernel::new(KernelConfig {
+            agent_id: id.0.clone(),
+            role: "seller".to_string(),
+            mode,
+            proposer: Box::new(brain),
+            policy: Box::new(DeterministicPolicy::default()),
+            capabilities,
+            contracts,
+            trace_max_entries: Some(1000),
+        });
         Self {
             id,
             wallet,
-            brain,
+            kernel,
             ledger,
             services: Vec::new(),
             issued_invoices: Vec::new(),
@@ -112,6 +137,21 @@ impl SellerAgent {
     /// Get mutable wallet
     pub fn wallet_mut(&mut self) -> &mut Wallet {
         &mut self.wallet
+    }
+
+    /// Access kernel trace (for audit/replay)
+    pub fn kernel_trace(&self) -> &openibank_agent_kernel::KernelTrace {
+        self.kernel.trace()
+    }
+
+    /// Set an active commitment context for gating
+    pub fn set_active_commitment(&mut self, commitment_id: impl Into<String>, approved: bool) {
+        self.kernel.set_active_commitment(commitment_id, approved);
+    }
+
+    /// Clear active commitment context
+    pub fn clear_active_commitment(&mut self) {
+        self.kernel.clear_active_commitment();
     }
 
     /// Get current balance
@@ -160,13 +200,15 @@ impl SellerAgent {
             .clone();
 
         // Use brain to propose invoice details
-        let context = InvoiceContext {
-            buyer_id: buyer_id.0.clone(),
-            service_name: service.name.clone(),
-            price: service.price.0,
-        };
-
-        let proposal = self.brain.propose_invoice(&context).await;
+        let proposal = self
+            .kernel
+            .propose_invoice(ProposalRequest::Invoice {
+                buyer_id: buyer_id.0.clone(),
+                service_name: service.name.clone(),
+                price: service.price.0,
+            })
+            .await
+            .map_err(|e| SellerError::KernelError(e.to_string()))?;
 
         // Create the invoice
         let invoice = Invoice {
@@ -195,6 +237,12 @@ impl SellerAgent {
 
     /// Deliver a service and create proof
     pub fn deliver_service(&mut self, invoice_id: &InvoiceId, proof_data: String) -> Result<DeliveryProof> {
+        self.kernel
+            .authorize_action(KernelAction::DeliverService {
+                invoice_id: invoice_id.0.clone(),
+            })
+            .map_err(|e| SellerError::KernelError(e.to_string()))?;
+
         // Verify invoice exists
         let _invoice = self
             .issued_invoices
@@ -218,6 +266,12 @@ impl SellerAgent {
 
     /// Receive payment (called when escrow is released)
     pub fn receive_payment(&mut self, amount: Amount) -> Result<()> {
+        self.kernel
+            .authorize_action(KernelAction::ReceivePayment {
+                amount: amount.0,
+                asset: AssetId::iusd().0,
+            })
+            .map_err(|e| SellerError::KernelError(e.to_string()))?;
         self.wallet.credit(&AssetId::iusd(), amount)?;
         Ok(())
     }
@@ -310,6 +364,7 @@ mod tests {
 
         assert_eq!(seller.balance(), Amount::zero());
 
+        seller.set_active_commitment("test_commitment", true);
         seller.receive_payment(Amount::new(5000)).unwrap();
 
         assert_eq!(seller.balance(), Amount::new(5000));

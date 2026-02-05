@@ -40,6 +40,6 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures = { workspace = true }
 clap = { workspace = true, features = ["env"] }
-palm-registry = { path = "../../../maple/crates/palm-registry" }
+palm-registry = { path = "../../../maple/crates/palm/registry" }
 tokio-stream = "0.1"
 async-stream = "0.3"

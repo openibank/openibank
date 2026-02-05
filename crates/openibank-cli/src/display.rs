@@ -1,5 +1,7 @@
 //! Display utilities for the CLI
 
+#![allow(dead_code)]
+
 use colored::*;
 
 /// Print a section header

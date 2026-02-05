@@ -20,6 +20,7 @@ aas-types = { workspace = true }
 # OpeniBank
 openibank-core = { workspace = true }
 openibank-maple = { workspace = true }
+openibank-agent-kernel = { workspace = true }
 
 # Shared deps
 serde = { workspace = true }

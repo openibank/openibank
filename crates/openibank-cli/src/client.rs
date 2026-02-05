@@ -15,6 +15,7 @@ pub struct PlaygroundClient {
 
 #[derive(Debug, Deserialize)]
 pub struct AgentInfo {
+    #[allow(dead_code)]
     pub id: String,
     pub name: String,
     pub role: String,
@@ -32,6 +33,7 @@ pub struct ServiceInfo {
 
 #[derive(Debug, Deserialize)]
 pub struct StatusResponse {
+    #[allow(dead_code)]
     pub name: String,
     pub version: String,
     pub llm_available: bool,
@@ -54,12 +56,14 @@ pub struct AgentsStatus {
 #[derive(Debug, Deserialize)]
 pub struct TradingStatus {
     pub trade_count: u32,
+    #[allow(dead_code)]
     pub total_volume: u64,
     pub total_volume_display: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct IssuerStatus {
+    #[allow(dead_code)]
     pub total_supply: u64,
     pub remaining_supply: u64,
     pub total_supply_display: String,
@@ -167,6 +171,7 @@ impl PlaygroundClient {
     }
 
     /// Execute a trade
+    #[allow(dead_code)]
     pub async fn execute_trade(&self, buyer_id: &str, seller_id: &str) -> Result<serde_json::Value> {
         let resp = self.client
             .post(format!("{}/api/trade", self.base_url))
@@ -187,6 +192,7 @@ impl PlaygroundClient {
     }
 
     /// Start auto trading
+    #[allow(dead_code)]
     pub async fn auto_trade(&self, rounds: u32, delay_ms: u64) -> Result<serde_json::Value> {
         let resp = self.client
             .post(format!("{}/api/trade/auto", self.base_url))
@@ -241,6 +247,7 @@ impl PlaygroundClient {
     }
 
     /// Get ledger accounts
+    #[allow(dead_code)]
     pub async fn get_ledger_accounts(&self) -> Result<serde_json::Value> {
         let resp = self.client
             .get(format!("{}/api/ledger/accounts", self.base_url))
@@ -252,6 +259,7 @@ impl PlaygroundClient {
     }
 
     /// Get transactions
+    #[allow(dead_code)]
     pub async fn get_transactions(&self) -> Result<serde_json::Value> {
         let resp = self.client
             .get(format!("{}/api/transactions", self.base_url))
@@ -263,6 +271,7 @@ impl PlaygroundClient {
     }
 
     /// Get resonator states
+    #[allow(dead_code)]
     pub async fn get_resonators(&self) -> Result<serde_json::Value> {
         let resp = self.client
             .get(format!("{}/api/resonators", self.base_url))
@@ -274,6 +283,7 @@ impl PlaygroundClient {
     }
 
     /// Reset playground
+    #[allow(dead_code)]
     pub async fn reset(&self) -> Result<serde_json::Value> {
         let resp = self.client
             .post(format!("{}/api/reset", self.base_url))

@@ -4,6 +4,8 @@
 //! while maintaining deterministic behavior as the default.
 
 use openibank_guard::{Guard, ProposedArbiterDecision, ProposedInvoice, ProposedPaymentIntent};
+use openibank_agent_kernel::{KernelProposal, KernelProposer, ProposalRequest, ProposeError};
+use async_trait::async_trait;
 use openibank_llm::{
     CompletionRequest, LLMRouter, Message, ProviderKind, Result as LLMResult,
 };
@@ -29,6 +31,55 @@ pub struct AgentBrain {
     llm: Option<LLMRouter>,
     guard: Guard,
     mode: BrainMode,
+}
+
+#[async_trait]
+impl KernelProposer for AgentBrain {
+    async fn propose(&self, request: ProposalRequest) -> Result<KernelProposal, ProposeError> {
+        match request {
+            ProposalRequest::Payment {
+                seller_id,
+                service_description,
+                price,
+                available_budget,
+            } => {
+                let context = PaymentContext {
+                    seller_id,
+                    service_description,
+                    price,
+                    available_budget,
+                };
+                let proposal = self.propose_payment(&context).await;
+                Ok(KernelProposal::Payment(proposal))
+            }
+            ProposalRequest::Invoice {
+                buyer_id,
+                service_name,
+                price,
+            } => {
+                let context = InvoiceContext {
+                    buyer_id,
+                    service_name,
+                    price,
+                };
+                let proposal = self.propose_invoice(&context).await;
+                Ok(KernelProposal::Invoice(proposal))
+            }
+            ProposalRequest::Arbitration {
+                escrow_id,
+                delivery_proof,
+                dispute_reason,
+            } => {
+                let context = ArbiterContext {
+                    escrow_id,
+                    delivery_proof,
+                    dispute_reason,
+                };
+                let proposal = self.propose_arbiter_decision(&context).await;
+                Ok(KernelProposal::Arbitration(proposal))
+            }
+        }
+    }
 }
 
 impl AgentBrain {

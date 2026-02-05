@@ -163,7 +163,7 @@ impl TradeCommitmentManager {
     }
 
     /// Submit a commitment to the AAS and update tracking
-    pub fn submit_and_track(
+    pub async fn submit_and_track(
         &self,
         accountability: &IBankAccountability,
         commitment: RcfCommitment,
@@ -177,6 +177,7 @@ impl TradeCommitmentManager {
         let decision = accountability
             .aas()
             .submit_commitment(commitment)
+            .await
             .map_err(|e| format!("AAS submission failed: {}", e))?;
 
         // Update based on decision
@@ -192,7 +193,7 @@ impl TradeCommitmentManager {
     }
 
     /// Record that trade execution has started
-    pub fn record_execution_started(
+    pub async fn record_execution_started(
         &self,
         accountability: &IBankAccountability,
         commitment_id: &str,
@@ -200,6 +201,7 @@ impl TradeCommitmentManager {
         let cid = CommitmentId::new(commitment_id);
         accountability
             .record_trade_started(&cid)
+            .await
             .map_err(|e| format!("Failed to record execution start: {}", e))?;
 
         self.update_status(commitment_id, TradeCommitmentStatus::Executing);
@@ -207,7 +209,7 @@ impl TradeCommitmentManager {
     }
 
     /// Record trade outcome (success or failure)
-    pub fn record_outcome(
+    pub async fn record_outcome(
         &self,
         accountability: &IBankAccountability,
         commitment_id: &str,
@@ -217,6 +219,7 @@ impl TradeCommitmentManager {
         let cid = CommitmentId::new(commitment_id);
         accountability
             .record_trade_outcome(&cid, success, details)
+            .await
             .map_err(|e| format!("Failed to record outcome: {}", e))?;
 
         let status = if success {

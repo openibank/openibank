@@ -13,7 +13,11 @@ use openibank_ledger::Ledger;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::brain::{AgentBrain, ArbiterContext};
+use crate::brain::AgentBrain;
+use openibank_agent_kernel::{
+    AgentKernel, CapabilitySet, Contract, ContractSet, DeterministicPolicy, KernelConfig,
+    KernelMode, ProposalRequest,
+};
 use crate::seller::DeliveryProof;
 
 /// Errors that can occur in arbiter operations
@@ -27,6 +31,9 @@ pub enum ArbiterError {
 
     #[error("Already decided: {case_id}")]
     AlreadyDecided { case_id: String },
+
+    #[error("Kernel error: {0}")]
+    KernelError(String),
 }
 
 pub type Result<T> = std::result::Result<T, ArbiterError>;
@@ -61,7 +68,7 @@ pub struct DecisionResult {
 /// - Makes fair decisions on escrow release/refund
 pub struct ArbiterAgent {
     id: ResonatorId,
-    brain: AgentBrain,
+    kernel: AgentKernel,
     #[allow(dead_code)]
     ledger: Arc<Ledger>,
     cases: Vec<DisputeCase>,
@@ -70,19 +77,37 @@ pub struct ArbiterAgent {
 impl ArbiterAgent {
     /// Create a new arbiter agent
     pub fn new(id: ResonatorId, ledger: Arc<Ledger>) -> Self {
-        Self {
-            id,
-            brain: AgentBrain::deterministic(),
-            ledger,
-            cases: Vec::new(),
-        }
+        let brain = AgentBrain::deterministic();
+        Self::with_brain(id, ledger, brain)
     }
 
     /// Create with LLM brain
     pub fn with_brain(id: ResonatorId, ledger: Arc<Ledger>, brain: AgentBrain) -> Self {
+        let mode = match brain.mode() {
+            crate::brain::BrainMode::Deterministic => KernelMode::Deterministic,
+            crate::brain::BrainMode::LLM => KernelMode::Llm,
+        };
+        let capabilities = CapabilitySet::from_attested(["escrow.resolve"]);
+        let contracts = ContractSet::new(vec![Contract {
+            name: "arbiter_contract".to_string(),
+            max_spend: None,
+            allowed_assets: vec![],
+            require_reversible: false,
+            allowed_outcomes: vec!["release".to_string(), "refund".to_string(), "partial".to_string()],
+        }]);
+        let kernel = AgentKernel::new(KernelConfig {
+            agent_id: id.0.clone(),
+            role: "arbiter".to_string(),
+            mode,
+            proposer: Box::new(brain),
+            policy: Box::new(DeterministicPolicy::default()),
+            capabilities,
+            contracts,
+            trace_max_entries: Some(1000),
+        });
         Self {
             id,
-            brain,
+            kernel,
             ledger,
             cases: Vec::new(),
         }
@@ -91,6 +116,21 @@ impl ArbiterAgent {
     /// Get the agent's ID
     pub fn id(&self) -> &ResonatorId {
         &self.id
+    }
+
+    /// Access kernel trace (for audit/replay)
+    pub fn kernel_trace(&self) -> &openibank_agent_kernel::KernelTrace {
+        self.kernel.trace()
+    }
+
+    /// Set an active commitment context for gating
+    pub fn set_active_commitment(&mut self, commitment_id: impl Into<String>, approved: bool) {
+        self.kernel.set_active_commitment(commitment_id, approved);
+    }
+
+    /// Clear active commitment context
+    pub fn clear_active_commitment(&mut self) {
+        self.kernel.clear_active_commitment();
     }
 
     /// Open a new dispute case
@@ -173,13 +213,15 @@ impl ArbiterAgent {
         }
 
         // Use brain to propose decision
-        let context = ArbiterContext {
-            escrow_id: case.escrow_id.0.clone(),
-            delivery_proof: case.delivery_proof.as_ref().map(|p| p.proof_data.clone()),
-            dispute_reason: case.dispute_reason.clone(),
-        };
-
-        let proposal = self.brain.propose_arbiter_decision(&context).await;
+        let proposal = self
+            .kernel
+            .propose_arbitration(ProposalRequest::Arbitration {
+                escrow_id: case.escrow_id.0.clone(),
+                delivery_proof: case.delivery_proof.as_ref().map(|p| p.proof_data.clone()),
+                dispute_reason: case.dispute_reason.clone(),
+            })
+            .await
+            .map_err(|e| ArbiterError::KernelError(e.to_string()))?;
 
         // Update case with decision
         let case = self
@@ -267,6 +309,7 @@ mod tests {
         };
 
         let case = arbiter.open_case(&escrow, None, Some(proof));
+        arbiter.set_active_commitment("test_commitment", true);
         let result = arbiter.decide(&case.case_id).await.unwrap();
 
         // With delivery proof and no dispute, should release
@@ -285,6 +328,7 @@ mod tests {
             None,
         );
 
+        arbiter.set_active_commitment("test_commitment", true);
         let result = arbiter.decide(&case.case_id).await.unwrap();
 
         // With dispute and no proof, should refund
@@ -300,6 +344,7 @@ mod tests {
         let case = arbiter.open_case(&escrow, None, None);
 
         // First decision
+        arbiter.set_active_commitment("test_commitment", true);
         arbiter.decide(&case.case_id).await.unwrap();
 
         // Second decision should fail

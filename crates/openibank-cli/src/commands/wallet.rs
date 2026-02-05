@@ -130,7 +130,7 @@ pub async fn transfer(from: &str, to: &str, amount: u64, _purpose: &str) -> anyh
     println!("  Amount: {}", format!("${:.2}", amount as f64 / 100.0).bright_cyan());
     println!();
 
-    let mut wallets = wallets().write().await;
+    let wallets = wallets().write().await;
 
     // Check both wallets exist
     if !wallets.contains_key(from) {

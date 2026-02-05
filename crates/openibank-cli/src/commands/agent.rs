@@ -11,6 +11,7 @@ use openibank_core::{Amount, AssetId, ResonatorId};
 use openibank_issuer::{Issuer, IssuerConfig, MintIntent};
 use openibank_ledger::Ledger;
 use openibank_llm::LLMRouter;
+use uuid::Uuid;
 
 /// Run a buyer agent
 pub async fn run_buyer(
@@ -271,6 +272,10 @@ pub async fn run_marketplace(
                         let invoice_id = invoice.invoice_id.clone();
 
                         if buyers[buyer_idx].accept_invoice(invoice).is_ok() {
+                            let commitment_id = format!("cli_commit_{}", Uuid::new_v4());
+                            buyers[buyer_idx].set_active_commitment(commitment_id.clone(), true);
+                            sellers[seller_idx].set_active_commitment(commitment_id.clone(), true);
+
                             if let Ok((_, escrow)) = buyers[buyer_idx].pay_invoice(&invoice_id).await {
                                 let escrow_id = escrow.escrow_id.clone();
 
@@ -282,6 +287,8 @@ pub async fn run_marketplace(
                                     }
                                 }
                             }
+                            buyers[buyer_idx].clear_active_commitment();
+                            sellers[seller_idx].clear_active_commitment();
                         }
                     }
                 }

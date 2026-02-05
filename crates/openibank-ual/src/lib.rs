@@ -35,6 +35,7 @@ use thiserror::Error;
 pub use ual_types::{UalStatement, CommitStatement, OperationStatement, ReversibilitySpec};
 pub use ual_parser::{parse as ual_parse, UalParseError};
 pub use ual_compiler::{compile as ual_compile, UalCompiled, UalCompileError};
+use openibank_agent_kernel::AgentKernel;
 
 /// Errors from banking UAL operations
 #[derive(Debug, Error)]
@@ -188,6 +189,20 @@ pub fn parse_input(input: &str) -> Result<ParsedInput, BankingUalError> {
 /// Compile parsed UAL statements into artifacts
 pub fn compile_statements(statements: &[UalStatement]) -> Result<Vec<UalCompiled>, BankingUalError> {
     Ok(ual_compile(statements)?)
+}
+
+/// Compile UAL statements and feed the compiled artifacts into an AgentKernel.
+///
+/// This ensures the kernel only consumes compiled RCF/PALM artifacts (never raw text).
+pub fn compile_statements_with_kernel(
+    statements: &[UalStatement],
+    kernel: &mut AgentKernel,
+) -> Result<Vec<UalCompiled>, BankingUalError> {
+    let compiled = compile_statements(statements)?;
+    kernel
+        .consume_ual_artifacts(&compiled)
+        .map_err(|e| BankingUalError::BankingCommand(e.to_string()))?;
+    Ok(compiled)
 }
 
 /// Parsed input - either standard UAL or banking commands

@@ -8,10 +8,10 @@ description = "PALM fleet orchestration for OpeniBank agent banking"
 
 [dependencies]
 # PALM Fleet Orchestration (Maple)
-palm-types = { path = "../../../maple/crates/palm-types" }
-palm-registry = { path = "../../../maple/crates/palm-registry" }
-palm-deployment = { path = "../../../maple/crates/palm-deployment" }
-palm-health = { path = "../../../maple/crates/palm-health" }
+palm-types = { path = "../../../maple/crates/palm/types" }
+palm-registry = { path = "../../../maple/crates/palm/registry" }
+palm-deployment = { path = "../../../maple/crates/palm/deployment" }
+palm-health = { path = "../../../maple/crates/palm/health" }
 
 # Maple core
 maple-runtime = { workspace = true }

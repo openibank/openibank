@@ -555,7 +555,7 @@ fn print_banner() {
     println!("{}{}{}",
         "║  ".bright_cyan(),
         "OpeniBank".bright_white().bold(),
-        " - Programmable Wallets + Receipts for AI Agents       ║".bright_cyan()
+        " - Programmable Wallets + Receipts for AI Agents         ║".bright_cyan()
     );
     println!("{}", "║  Powered by Maple AI Framework (Resonance Architecture)         ║".bright_cyan());
     println!("{}", "║                                                                  ║".bright_cyan());
