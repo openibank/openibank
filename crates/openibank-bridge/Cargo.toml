@@ -1,0 +1,15 @@
+[package]
+name = "openibank-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "On-chain to off-chain atomic bridge for OpeniBank"
+
+[dependencies]
+openibank-types = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }

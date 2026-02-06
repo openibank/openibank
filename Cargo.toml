@@ -1,19 +1,51 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/openibank-agent-kernel",
+    # Foundation layer (zero dependencies on other openibank crates)
+    "crates/openibank-types",
+
+    # Core layer
     "crates/openibank-core",
     "crates/openibank-ledger",
     "crates/openibank-issuer",
+
+    # Wallet & Permits
+    "crates/openibank-wallet",
+    "crates/openibank-permits",
+    "crates/openibank-escrow",
+
+    # Clearing & Settlement
+    "crates/openibank-clearing",
+    "crates/openibank-settlement",
+    "crates/openibank-bridge",
+
+    # Marketplace & Arena
+    "crates/openibank-marketplace",
+    "crates/openibank-capabilities",
+
+    # Policy & Audit
+    "crates/openibank-policy",
+    "crates/openibank-audit",
+
+    # Agent layer
+    "crates/openibank-agent-kernel",
     "crates/openibank-llm",
     "crates/openibank-agents",
     "crates/openibank-guard",
     "crates/openibank-receipts",
+
+    # Integration layer
     "crates/openibank-maple",
     "crates/openibank-palm",
     "crates/openibank-ual",
     "crates/openibank-state",
+
+    # Surface layer
+    "crates/openibank-sdk",
+    "crates/openibank-api",
     "crates/openibank-cli",
+
+    # Services
     "services/openibank-issuer-resonator",
     "services/openibank-playground",
     "services/openibank-mcp",
@@ -100,16 +132,45 @@ ual-types = { path = "../maple/crates/ual-types" }
 ual-parser = { path = "../maple/crates/ual-parser" }
 ual-compiler = { path = "../maple/crates/ual-compiler" }
 
-# Workspace crates
+# Workspace crates - Foundation
+openibank-types = { path = "crates/openibank-types" }
+
+# Workspace crates - Core
 openibank-core = { path = "crates/openibank-core" }
 openibank-ledger = { path = "crates/openibank-ledger" }
 openibank-issuer = { path = "crates/openibank-issuer" }
+
+# Workspace crates - Wallet & Permits
+openibank-wallet = { path = "crates/openibank-wallet" }
+openibank-permits = { path = "crates/openibank-permits" }
+openibank-escrow = { path = "crates/openibank-escrow" }
+
+# Workspace crates - Clearing & Settlement
+openibank-clearing = { path = "crates/openibank-clearing" }
+openibank-settlement = { path = "crates/openibank-settlement" }
+openibank-bridge = { path = "crates/openibank-bridge" }
+
+# Workspace crates - Marketplace
+openibank-marketplace = { path = "crates/openibank-marketplace" }
+openibank-capabilities = { path = "crates/openibank-capabilities" }
+
+# Workspace crates - Policy & Audit
+openibank-policy = { path = "crates/openibank-policy" }
+openibank-audit = { path = "crates/openibank-audit" }
+
+# Workspace crates - Agent
 openibank-llm = { path = "crates/openibank-llm" }
 openibank-agent-kernel = { path = "crates/openibank-agent-kernel" }
 openibank-agents = { path = "crates/openibank-agents" }
 openibank-guard = { path = "crates/openibank-guard" }
 openibank-receipts = { path = "crates/openibank-receipts" }
+
+# Workspace crates - Integration
 openibank-maple = { path = "crates/openibank-maple" }
 openibank-palm = { path = "crates/openibank-palm" }
 openibank-ual = { path = "crates/openibank-ual" }
 openibank-state = { path = "crates/openibank-state" }
+
+# Workspace crates - Surface
+openibank-sdk = { path = "crates/openibank-sdk" }
+openibank-api = { path = "crates/openibank-api" }

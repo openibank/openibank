@@ -1,0 +1,13 @@
+[package]
+name = "openibank-permits"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Spend permits, delegation, and authorization for OpeniBank"
+
+[dependencies]
+openibank-types = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
