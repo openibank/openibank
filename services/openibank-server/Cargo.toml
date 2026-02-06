@@ -21,6 +21,7 @@ openibank-maple = { workspace = true }
 openibank-state = { workspace = true }
 openibank-palm = { path = "../../crates/openibank-palm" }
 openibank-ual = { path = "../../crates/openibank-ual" }
+openibank-receipts = { workspace = true }
 
 # Maple AI Framework
 maple-runtime = { workspace = true }

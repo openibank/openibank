@@ -42,6 +42,19 @@ cargo run --release -p openibank-server
 
 That's it. You're running an AI Agent Bank.
 
+### 5-Minute Demo (Default Deterministic Mode)
+
+```bash
+# Terminal 1
+cargo run -p openibank-server
+
+# Terminal 2 (headless summary + receipt bundle export URL)
+./scripts/demo.sh
+```
+
+Or open `http://localhost:8080` and click `RUN DEMO`.
+The default demo does not require LLM credentials.
+
 ## Services
 
 OpeniBank provides multiple services. Here's how to run each one:
@@ -77,12 +90,20 @@ OPENIBANK_LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... cargo run --release -p
 | `GET /` | Web dashboard |
 | `GET /api/status` | System status |
 | `GET /api/health` | Health check |
+| `GET /api/events` | SSE event stream |
+| `POST /api/demo/run` | Run deterministic demo scenario (requires `{ "commit": true }`) |
 | `GET /api/info` | System info and capabilities |
 | `POST /api/ual` | Execute UAL commands |
 | `GET /api/fleet/status` | Fleet orchestration status |
 | `GET /api/fleet/specs` | Registered agent specs |
 | `POST /api/fleet/deploy` | Deploy agent instances |
 | `GET /api/agents` | List agents |
+| `GET /api/ledger/accounts` | Live account balances |
+| `GET /api/transactions` | Transaction history |
+| `GET /api/receipts` | Receipt records |
+| `GET /api/receipts/{id}` | Receipt by id |
+| `POST /api/receipts/verify` | Verify receipt signature/integrity |
+| `GET /api/receipts/export` | Export receipt bundle (`jsonl`) |
 | `GET /api/issuer/supply` | IUSD supply info |
 
 ### Playground (Interactive Web UI)
@@ -211,6 +232,7 @@ openibank/
 ├── Dockerfile                # Multi-stage Docker build
 ├── docker-compose.yml        # Docker Compose with optional Ollama
 └── scripts/
+    ├── demo.sh               # Headless deterministic demo runner
     └── install.sh            # One-line installer
 ```
 
