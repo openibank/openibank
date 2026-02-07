@@ -1,0 +1,32 @@
+[package]
+name = "openibank-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Cryptographic primitives for OpeniBank - key management, signatures, encryption"
+
+[dependencies]
+# Cryptography
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# Types
+openibank-types = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

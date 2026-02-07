@@ -382,15 +382,38 @@ impl SpendingLimits {
             }
         }
 
-        // Check total limit
-        if let Some(ref limit) = self.total {
-            if let Ok(new_total) = self.spent.checked_add(*amount) {
-                if &new_total > limit {
+        // Helper to check a periodic limit against spent + new amount
+        let check_limit = |limit: &Option<Amount>| -> bool {
+            if let Some(ref lim) = limit {
+                if let Ok(new_total) = self.spent.checked_add(*amount) {
+                    if &new_total > lim {
+                        return false;
+                    }
+                } else {
                     return false;
                 }
-            } else {
-                return false;
             }
+            true
+        };
+
+        // Check daily limit
+        if !check_limit(&self.daily) {
+            return false;
+        }
+
+        // Check weekly limit
+        if !check_limit(&self.weekly) {
+            return false;
+        }
+
+        // Check monthly limit
+        if !check_limit(&self.monthly) {
+            return false;
+        }
+
+        // Check total limit
+        if !check_limit(&self.total) {
+            return false;
         }
 
         true

@@ -8,7 +8,10 @@ description = "Settlement execution and finality for OpeniBank"
 [dependencies]
 openibank-types = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }

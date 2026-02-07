@@ -6,6 +6,7 @@ members = [
 
     # Core layer
     "crates/openibank-core",
+    "crates/openibank-crypto",
     "crates/openibank-ledger",
     "crates/openibank-issuer",
 
@@ -137,6 +138,7 @@ openibank-types = { path = "crates/openibank-types" }
 
 # Workspace crates - Core
 openibank-core = { path = "crates/openibank-core" }
+openibank-crypto = { path = "crates/openibank-crypto" }
 openibank-ledger = { path = "crates/openibank-ledger" }
 openibank-issuer = { path = "crates/openibank-issuer" }
 
