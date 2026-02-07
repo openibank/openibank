@@ -51,6 +51,18 @@ members = [
     "services/openibank-playground",
     "services/openibank-mcp",
     "services/openibank-server",
+
+    # ResonanceX Exchange
+    "crates/resonancex-types",
+    "crates/resonancex-orderbook",
+    "crates/resonancex-engine",
+    "crates/resonancex-marketdata",
+    "crates/resonancex-api",
+    "crates/resonancex-ws",
+    "crates/resonancex-history",
+    "crates/resonancex-arena",
+    "crates/resonancex-trading-bot",
+    "crates/resonancex-alerts",
 ]
 
 [workspace.package]
@@ -176,3 +188,24 @@ openibank-state = { path = "crates/openibank-state" }
 # Workspace crates - Surface
 openibank-sdk = { path = "crates/openibank-sdk" }
 openibank-api = { path = "crates/openibank-api" }
+
+# ResonanceX Exchange crates
+resonancex-types = { path = "crates/resonancex-types" }
+resonancex-orderbook = { path = "crates/resonancex-orderbook" }
+resonancex-engine = { path = "crates/resonancex-engine" }
+resonancex-marketdata = { path = "crates/resonancex-marketdata" }
+resonancex-api = { path = "crates/resonancex-api" }
+resonancex-ws = { path = "crates/resonancex-ws" }
+resonancex-history = { path = "crates/resonancex-history" }
+resonancex-arena = { path = "crates/resonancex-arena" }
+resonancex-trading-bot = { path = "crates/resonancex-trading-bot" }
+resonancex-alerts = { path = "crates/resonancex-alerts" }
+
+# Additional dependencies for ResonanceX
+rust_decimal = { version = "1.33", features = ["serde"] }
+rust_decimal_macros = "1.33"
+crossbeam-channel = "0.5"
+flume = "0.11"
+parking_lot = "0.12"
+tokio-tungstenite = "0.21"
+nats = "0.25"

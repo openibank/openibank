@@ -1,0 +1,27 @@
+[package]
+name = "resonancex-ws"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebSocket server for real-time market data streaming"
+
+[dependencies]
+resonancex-types = { workspace = true }
+resonancex-marketdata = { workspace = true }
+openibank-types = { workspace = true }
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures = { workspace = true }
+flume = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
