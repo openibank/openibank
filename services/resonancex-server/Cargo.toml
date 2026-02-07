@@ -1,0 +1,54 @@
+[package]
+name = "resonancex-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ResonanceX Exchange Server - AI-Native Trading Platform"
+
+[[bin]]
+name = "resonancex"
+path = "src/main.rs"
+
+[dependencies]
+# ResonanceX crates
+resonancex-types = { workspace = true }
+resonancex-orderbook = { workspace = true }
+resonancex-engine = { workspace = true }
+resonancex-marketdata = { workspace = true }
+
+# OpeniBank core
+openibank-types = { workspace = true }
+
+# Web framework
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Concurrency
+parking_lot = { workspace = true }
+flume = { workspace = true }
+
+# Decimal
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+rand = { workspace = true }
+clap = { workspace = true }

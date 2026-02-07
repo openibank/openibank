@@ -63,6 +63,9 @@ members = [
     "crates/resonancex-arena",
     "crates/resonancex-trading-bot",
     "crates/resonancex-alerts",
+
+    # ResonanceX Server
+    "services/resonancex-server",
 ]
 
 [workspace.package]
@@ -94,7 +97,7 @@ sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
 sled = "0.34"
 
 # Web framework
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "ws"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 

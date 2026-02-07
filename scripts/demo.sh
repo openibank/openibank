@@ -1,46 +1,95 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+#
+# ResonanceX Demo - The World's First AI-Native Trading Exchange
+# "Where AI Agents Trade at the Speed of Thought"
+#
+# Usage:
+#   ./scripts/demo.sh              # Start with default settings
+#   ./scripts/demo.sh --agents 20  # Start with 20 trading agents
+#   ./scripts/demo.sh --port 9999  # Start on custom port
+#
 
-BASE_URL="${OPENIBANK_URL:-http://localhost:8080}"
-DEMO_ENDPOINT="${BASE_URL%/}/api/demo/run"
+set -e
 
-if ! command -v curl >/dev/null 2>&1; then
-  echo "error: curl is required" >&2
-  exit 1
-fi
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-echo "Running OpeniBank deterministic demo against ${BASE_URL}..."
+# Banner
+echo ""
+echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║${NC}                                                                   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   ${GREEN}██████╗ ███████╗███████╗ ██████╗ ███╗   ██╗ █████╗ ███╗   ██╗${NC}   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   ${GREEN}██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║██╔══██╗████╗  ██║${NC}   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   ${GREEN}██████╔╝█████╗  ███████╗██║   ██║██╔██╗ ██║███████║██╔██╗ ██║${NC}   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   ${GREEN}██╔══██╗██╔══╝  ╚════██║██║   ██║██║╚██╗██║██╔══██║██║╚██╗██║${NC}   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   ${GREEN}██║  ██║███████╗███████║╚██████╔╝██║ ╚████║██║  ██║██║ ╚████║${NC}   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   ${GREEN}╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═══╝${NC}   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}                                                                   ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}              ${YELLOW}The World's First AI-Native Trading Exchange${NC}         ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}          ${BLUE}\"Where AI Agents Trade at the Speed of Thought\"${NC}          ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}                                                                   ${CYAN}║${NC}"
+echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
 
-response="$(curl -sS -X POST "${DEMO_ENDPOINT}" \
-  -H 'Content-Type: application/json' \
-  -d '{"commit":true}')"
+# Default values
+PORT=8888
+AGENTS=10
 
-if command -v jq >/dev/null 2>&1; then
-  success="$(printf '%s' "${response}" | jq -r '.success // false')"
-  if [[ "${success}" != "true" ]]; then
-    echo "Demo failed:"
-    printf '%s' "${response}" | jq .
+# Parse command line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --port) PORT="$2"; shift ;;
+        --agents) AGENTS="$2"; shift ;;
+        -h|--help)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --port PORT     Port to run the exchange on (default: 8888)"
+            echo "  --agents N      Number of demo trading agents (default: 10)"
+            echo "  -h, --help      Show this help message"
+            echo ""
+            exit 0
+            ;;
+        *) echo "Unknown parameter: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo -e "${BLUE}Building ResonanceX...${NC}"
+cd "$PROJECT_DIR"
+cargo build -p resonancex-server --release 2>/dev/null || cargo build -p resonancex-server
+
+echo ""
+echo -e "${GREEN}Starting ResonanceX Exchange...${NC}"
+echo ""
+echo -e "  ${CYAN}Dashboard:${NC}  http://localhost:${PORT}"
+echo -e "  ${CYAN}REST API:${NC}   http://localhost:${PORT}/api/v1"
+echo -e "  ${CYAN}WebSocket:${NC}  ws://localhost:${PORT}/ws"
+echo ""
+echo -e "  ${YELLOW}Trading Markets:${NC}"
+echo -e "    - ETH/IUSD (Ethereum)"
+echo -e "    - BTC/IUSD (Bitcoin)"
+echo -e "    - SOL/IUSD (Solana)"
+echo ""
+echo -e "  ${YELLOW}Demo Mode:${NC} ${AGENTS} AI agents trading in real-time"
+echo ""
+echo -e "${BLUE}Press Ctrl+C to stop the server${NC}"
+echo ""
+
+# Check if port is in use
+if lsof -i:$PORT >/dev/null 2>&1; then
+    echo -e "${RED}Error: Port $PORT is already in use${NC}"
     exit 1
-  fi
-
-  demo_id="$(printf '%s' "${response}" | jq -r '.demo_id')"
-  scenario="$(printf '%s' "${response}" | jq -r '.scenario')"
-  bundle_id="$(printf '%s' "${response}" | jq -r '.receipt_bundle_id')"
-  commitments="$(printf '%s' "${response}" | jq -r '.commitment_ids | join(", ")')"
-  buyer_balance="$(printf '%s' "${response}" | jq -r '.balances.buyer')"
-  seller_balance="$(printf '%s' "${response}" | jq -r '.balances.seller')"
-  export_url="$(printf '%s' "${response}" | jq -r '.share_export_url')"
-
-  printf '\nDemo Summary\n'
-  printf '  Demo ID: %s\n' "${demo_id}"
-  printf '  Scenario: %s\n' "${scenario}"
-  printf '  Commitment IDs: %s\n' "${commitments}"
-  printf '  Receipt Bundle: %s\n' "${bundle_id}"
-  printf '  Buyer Balance: $%.2f\n' "$(awk "BEGIN {print ${buyer_balance}/100}")"
-  printf '  Seller Balance: $%.2f\n' "$(awk "BEGIN {print ${seller_balance}/100}")"
-  printf '  Export URL: %s%s\n' "${BASE_URL%/}" "${export_url}"
-  printf '\n'
-else
-  echo "jq not found; raw response:"
-  echo "${response}"
 fi
+
+# Start the server
+exec cargo run -p resonancex-server --release -- --demo --demo-agents "$AGENTS" --port "$PORT"
