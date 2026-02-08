@@ -52,6 +52,9 @@ members = [
     "services/openibank-mcp",
     "services/openibank-server",
 
+    # Database Layer
+    "crates/openibank-db",
+
     # ResonanceX Exchange
     "crates/resonancex-types",
     "crates/resonancex-orderbook",
@@ -63,6 +66,7 @@ members = [
     "crates/resonancex-arena",
     "crates/resonancex-trading-bot",
     "crates/resonancex-alerts",
+    "crates/resonancex-fees",
 
     # ResonanceX Server
     "services/resonancex-server",
@@ -192,6 +196,9 @@ openibank-state = { path = "crates/openibank-state" }
 openibank-sdk = { path = "crates/openibank-sdk" }
 openibank-api = { path = "crates/openibank-api" }
 
+# Database Layer
+openibank-db = { path = "crates/openibank-db" }
+
 # ResonanceX Exchange crates
 resonancex-types = { path = "crates/resonancex-types" }
 resonancex-orderbook = { path = "crates/resonancex-orderbook" }
@@ -203,6 +210,10 @@ resonancex-history = { path = "crates/resonancex-history" }
 resonancex-arena = { path = "crates/resonancex-arena" }
 resonancex-trading-bot = { path = "crates/resonancex-trading-bot" }
 resonancex-alerts = { path = "crates/resonancex-alerts" }
+resonancex-fees = { path = "crates/resonancex-fees" }
+
+# Database dependencies
+deadpool-redis = "0.14"
 
 # Additional dependencies for ResonanceX
 rust_decimal = { version = "1.33", features = ["serde"] }

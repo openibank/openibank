@@ -1,0 +1,20 @@
+[package]
+name = "resonancex-fees"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ResonanceX Fee Engine - Tiered fee calculation with OBK discounts"
+
+[dependencies]
+resonancex-types = { workspace = true }
+openibank-types = { workspace = true }
+
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
