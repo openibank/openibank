@@ -38,7 +38,7 @@ This guide covers deploying OpeniBank services to production environments, inclu
 | Service | Port | Replicas | Resources |
 |---------|------|----------|-----------|
 | openibank-api-server | 3000 | 3+ | 2 CPU, 4GB RAM |
-| resonancex-server | 8080 | 2+ | 4 CPU, 8GB RAM |
+| resonancex-server | 8888 | 2+ | 4 CPU, 8GB RAM |
 | openibank-playground | 8080 | 1-2 | 1 CPU, 2GB RAM |
 | PostgreSQL | 5432 | Primary + 2 replicas | 4 CPU, 16GB RAM |
 | Redis | 6379 | 3-node cluster | 2 CPU, 4GB RAM |

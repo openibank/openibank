@@ -29,7 +29,7 @@
 //! use resonancex_api::{ApiServer, ApiConfig};
 //!
 //! let config = ApiConfig {
-//!     bind_addr: "0.0.0.0:8080".parse().unwrap(),
+//!     bind_addr: "0.0.0.0:8888".parse().unwrap(),
 //!     ..Default::default()
 //! };
 //!
@@ -73,7 +73,7 @@ pub struct ApiConfig {
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
-            bind_addr: "127.0.0.1:8080".parse().unwrap(),
+            bind_addr: "127.0.0.1:8888".parse().unwrap(),
             max_body_size: 1024 * 1024, // 1MB
             cors_enabled: true,
             rate_limit: Some(120),
@@ -333,7 +333,7 @@ mod tests {
     #[test]
     fn test_api_config_default() {
         let config = ApiConfig::default();
-        assert_eq!(config.bind_addr.port(), 8080);
+        assert_eq!(config.bind_addr.port(), 8888);
         assert!(config.cors_enabled);
         assert_eq!(config.rate_limit, Some(120));
     }

@@ -625,8 +625,297 @@ async fn dashboard() -> impl IntoResponse {
 }
 
 // ============================================================================
+// Market Configuration
+// ============================================================================
+
+/// Returns all 25 demo markets with proper configurations
+fn all_demo_markets() -> Vec<MarketConfig> {
+    use openibank_types::CryptoCurrency;
+
+    // Helper to create a market config with custom settings
+    fn market(
+        id: &str,
+        base: Currency,
+        quote: Currency,
+        price_prec: u8,
+        amount_prec: u8,
+        min_amount: Decimal,
+        _min_notional: Decimal,
+        maker_fee: Decimal,
+        taker_fee: Decimal,
+    ) -> MarketConfig {
+        let mut config = MarketConfig::new(MarketId::new(id), base, quote);
+        config.price_precision = price_prec;
+        config.amount_precision = amount_prec;
+        config.min_amount = min_amount;
+        config.maker_fee = maker_fee;
+        config.taker_fee = taker_fee;
+        config
+    }
+
+    vec![
+        // Tier 1: Blue Chips
+        market("BTC_IUSD", Currency::btc(), Currency::iusd(), 2, 6, dec!(0.00001), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("ETH_IUSD", Currency::eth(), Currency::iusd(), 2, 4, dec!(0.001), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("SOL_IUSD", Currency::Crypto(CryptoCurrency::SOL), Currency::iusd(), 2, 2, dec!(0.01), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("BNB_IUSD", Currency::Crypto(CryptoCurrency::BNB), Currency::iusd(), 2, 3, dec!(0.001), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("XRP_IUSD", Currency::Crypto(CryptoCurrency::XRP), Currency::iusd(), 4, 1, dec!(0.1), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("ADA_IUSD", Currency::Crypto(CryptoCurrency::ADA), Currency::iusd(), 4, 1, dec!(1.0), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("DOGE_IUSD", Currency::Crypto(CryptoCurrency::DOGE), Currency::iusd(), 6, 0, dec!(1.0), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("AVAX_IUSD", Currency::Crypto(CryptoCurrency::AVAX), Currency::iusd(), 2, 2, dec!(0.01), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("DOT_IUSD", Currency::Crypto(CryptoCurrency::DOT), Currency::iusd(), 3, 2, dec!(0.01), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("LINK_IUSD", Currency::Crypto(CryptoCurrency::LINK), Currency::iusd(), 3, 2, dec!(0.01), dec!(10), dec!(0.0008), dec!(0.001)),
+
+        // Tier 2: DeFi & L2
+        market("UNI_IUSD", Currency::Crypto(CryptoCurrency::UNI), Currency::iusd(), 3, 2, dec!(0.1), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("AAVE_IUSD", Currency::Crypto(CryptoCurrency::AAVE), Currency::iusd(), 2, 3, dec!(0.001), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("OP_IUSD", Currency::Crypto(CryptoCurrency::OP), Currency::iusd(), 4, 1, dec!(0.1), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("ARB_IUSD", Currency::Crypto(CryptoCurrency::ARB), Currency::iusd(), 4, 1, dec!(0.1), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("SUI_IUSD", Currency::Crypto(CryptoCurrency::SUI), Currency::iusd(), 4, 1, dec!(0.1), dec!(10), dec!(0.0008), dec!(0.001)),
+
+        // Tier 3: AI Tokens
+        market("FET_IUSD", Currency::Crypto(CryptoCurrency::FET), Currency::iusd(), 4, 1, dec!(1.0), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("RNDR_IUSD", Currency::Crypto(CryptoCurrency::RNDR), Currency::iusd(), 3, 2, dec!(0.1), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("TAO_IUSD", Currency::Crypto(CryptoCurrency::TAO), Currency::iusd(), 2, 4, dec!(0.001), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("NEAR_IUSD", Currency::Crypto(CryptoCurrency::NEAR), Currency::iusd(), 3, 1, dec!(0.1), dec!(10), dec!(0.0008), dec!(0.001)),
+        market("WLD_IUSD", Currency::Crypto(CryptoCurrency::WLD), Currency::iusd(), 4, 1, dec!(1.0), dec!(10), dec!(0.0008), dec!(0.001)),
+
+        // Native OpeniBank Token
+        market("OBK_IUSD", Currency::Crypto(CryptoCurrency::OBK), Currency::iusd(), 4, 0, dec!(10.0), dec!(10), dec!(0.0005), dec!(0.0008)),
+
+        // Cross pairs
+        market("ETH_BTC", Currency::eth(), Currency::btc(), 6, 4, dec!(0.001), dec!(0.0001), dec!(0.0008), dec!(0.001)),
+        market("SOL_ETH", Currency::Crypto(CryptoCurrency::SOL), Currency::eth(), 6, 2, dec!(0.01), dec!(0.001), dec!(0.0008), dec!(0.001)),
+
+        // Stablecoin pairs
+        market("IUSD_USDT", Currency::iusd(), Currency::Crypto(CryptoCurrency::USDT), 4, 0, dec!(10.0), dec!(10), dec!(0.0002), dec!(0.0004)),
+        market("IUSD_USDC", Currency::iusd(), Currency::usdc(), 4, 0, dec!(10.0), dec!(10), dec!(0.0002), dec!(0.0004)),
+    ]
+}
+
+/// Seed prices for demo markets
+fn get_seed_price(market_id: &str) -> Decimal {
+    match market_id {
+        "BTC_IUSD" => dec!(97000),
+        "ETH_IUSD" => dec!(2650),
+        "SOL_IUSD" => dec!(200),
+        "BNB_IUSD" => dec!(680),
+        "XRP_IUSD" => dec!(2.50),
+        "ADA_IUSD" => dec!(0.75),
+        "DOGE_IUSD" => dec!(0.25),
+        "AVAX_IUSD" => dec!(28),
+        "DOT_IUSD" => dec!(5.50),
+        "LINK_IUSD" => dec!(20),
+        "UNI_IUSD" => dec!(9.50),
+        "AAVE_IUSD" => dec!(230),
+        "OP_IUSD" => dec!(1.20),
+        "ARB_IUSD" => dec!(0.55),
+        "SUI_IUSD" => dec!(3.80),
+        "FET_IUSD" => dec!(0.70),
+        "RNDR_IUSD" => dec!(5.50),
+        "TAO_IUSD" => dec!(450),
+        "NEAR_IUSD" => dec!(3.80),
+        "WLD_IUSD" => dec!(1.60),
+        "OBK_IUSD" => dec!(0.10),
+        "ETH_BTC" => dec!(0.0273),
+        "SOL_ETH" => dec!(0.0755),
+        "IUSD_USDT" => dec!(1.0001),
+        "IUSD_USDC" => dec!(0.9999),
+        _ => dec!(100),
+    }
+}
+
+/// Seed orderbooks with initial liquidity
+async fn seed_orderbooks(state: &AppState) {
+    let markets = state.engine.list_markets();
+
+    for market_id in markets {
+        let seed_price = get_seed_price(&market_id.0);
+
+        // Create 15 buy orders below seed price
+        for i in 1..=15 {
+            let spread = dec!(0.001) + dec!(0.0013) * Decimal::from(i); // 0.1% to 2% spread
+            let price = seed_price * (dec!(1) - spread);
+            let amount = dec!(0.1) + Decimal::from(rand::random::<u32>() % 50) / dec!(10);
+
+            let agent = AgentId::new();
+            if let Ok(order) = Order::builder()
+                .agent(agent)
+                .wallet(WalletId::new())
+                .market(market_id.clone())
+                .side(Side::Buy)
+                .order_type(OrderType::limit(price.round_dp(6)))
+                .amount(amount.round_dp(4))
+                .permit(PermitId::new())
+                .build()
+            {
+                let _ = state.engine.submit_order(order);
+            }
+        }
+
+        // Create 15 sell orders above seed price
+        for i in 1..=15 {
+            let spread = dec!(0.001) + dec!(0.0013) * Decimal::from(i); // 0.1% to 2% spread
+            let price = seed_price * (dec!(1) + spread);
+            let amount = dec!(0.1) + Decimal::from(rand::random::<u32>() % 50) / dec!(10);
+
+            let agent = AgentId::new();
+            if let Ok(order) = Order::builder()
+                .agent(agent)
+                .wallet(WalletId::new())
+                .market(market_id.clone())
+                .side(Side::Sell)
+                .order_type(OrderType::limit(price.round_dp(6)))
+                .amount(amount.round_dp(4))
+                .permit(PermitId::new())
+                .build()
+            {
+                let _ = state.engine.submit_order(order);
+            }
+        }
+
+        info!("Seeded orderbook for {} at ~{}", market_id.0, seed_price);
+    }
+}
+
+// ============================================================================
 // Demo Mode
 // ============================================================================
+
+/// Agent information with holdings
+#[derive(Debug, Clone, Serialize)]
+struct DemoAgent {
+    id: String,
+    name: String,
+    role: String,
+    holdings: HashMap<String, String>,
+}
+
+/// Demo agent configurations with their initial holdings
+fn create_demo_agents() -> Vec<(String, String, HashMap<String, Decimal>)> {
+    vec![
+        // Buyers
+        (
+            "buyer-001".to_string(),
+            "Buyer".to_string(),
+            HashMap::from([
+                ("IUSD".to_string(), dec!(50000.0)),
+                ("BTC".to_string(), dec!(0.5)),
+                ("ETH".to_string(), dec!(5.0)),
+            ]),
+        ),
+        (
+            "buyer-002".to_string(),
+            "Buyer".to_string(),
+            HashMap::from([
+                ("IUSD".to_string(), dec!(30000.0)),
+                ("SOL".to_string(), dec!(2.0)),
+                ("OBK".to_string(), dec!(100.0)),
+            ]),
+        ),
+        // Sellers
+        (
+            "seller-001".to_string(),
+            "Seller".to_string(),
+            HashMap::from([
+                ("BTC".to_string(), dec!(2.0)),
+                ("ETH".to_string(), dec!(20.0)),
+                ("SOL".to_string(), dec!(100.0)),
+                ("IUSD".to_string(), dec!(10000.0)),
+            ]),
+        ),
+        (
+            "seller-002".to_string(),
+            "Seller".to_string(),
+            HashMap::from([
+                ("ETH".to_string(), dec!(10.0)),
+                ("SOL".to_string(), dec!(50.0)),
+                ("DOGE".to_string(), dec!(5000.0)),
+                ("IUSD".to_string(), dec!(20000.0)),
+            ]),
+        ),
+        // Arbiter
+        (
+            "arbiter-001".to_string(),
+            "Arbiter".to_string(),
+            HashMap::from([
+                ("IUSD".to_string(), dec!(100000.0)),
+            ]),
+        ),
+        // Market Maker
+        (
+            "mm-bot-001".to_string(),
+            "MarketMaker".to_string(),
+            HashMap::from([
+                ("IUSD".to_string(), dec!(200000.0)),
+                ("BTC".to_string(), dec!(1.0)),
+                ("ETH".to_string(), dec!(10.0)),
+            ]),
+        ),
+    ]
+}
+
+/// Initialize demo agents with their holdings
+fn init_demo_agents(state: &AppState) {
+    let demo_agents = create_demo_agents();
+    let mut balances = state.balances.write();
+
+    for (name, _role, holdings) in demo_agents {
+        // Create a stable agent ID from the name
+        let agent_id = AgentId(uuid::Uuid::new_v5(
+            &uuid::Uuid::NAMESPACE_DNS,
+            name.as_bytes(),
+        ));
+
+        // Convert holdings to string format for storage
+        let mut agent_holdings = HashMap::new();
+        for (asset, amount) in holdings {
+            agent_holdings.insert(asset, amount);
+        }
+
+        balances.insert(agent_id, agent_holdings);
+        info!("Initialized demo agent: {}", name);
+    }
+}
+
+/// Get list of demo agents with their holdings
+async fn get_agents(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let demo_agents = create_demo_agents();
+    let balances = state.balances.read();
+
+    let agents: Vec<DemoAgent> = demo_agents
+        .into_iter()
+        .map(|(name, role, _initial_holdings)| {
+            // Get agent ID from name
+            let agent_id = AgentId(uuid::Uuid::new_v5(
+                &uuid::Uuid::NAMESPACE_DNS,
+                name.as_bytes(),
+            ));
+
+            // Get current holdings from state
+            let holdings = balances
+                .get(&agent_id)
+                .map(|h| {
+                    h.iter()
+                        .map(|(k, v)| (k.clone(), v.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            DemoAgent {
+                id: agent_id.0.to_string(),
+                name,
+                role,
+                holdings,
+            }
+        })
+        .collect();
+
+    ApiResponse::ok(serde_json::json!({
+        "agents": agents,
+        "count": agents.len(),
+    }))
+}
 
 async fn run_demo_trading(state: Arc<AppState>, num_agents: usize) {
     info!("Starting demo trading with {} agents", num_agents);
@@ -754,18 +1043,19 @@ async fn main() -> anyhow::Result<()> {
         demo_mode: cli.demo,
     });
 
-    // Add default markets
-    let markets = vec![
-        ("ETH_IUSD", Currency::eth(), Currency::iusd()),
-        ("BTC_IUSD", Currency::btc(), Currency::iusd()),
-        ("SOL_IUSD", Currency::Crypto(openibank_types::CryptoCurrency::SOL), Currency::iusd()),
-    ];
-
-    for (id, base, quote) in markets {
-        let config = MarketConfig::new(MarketId::new(id), base, quote);
+    // Add all 25 demo markets
+    let markets = all_demo_markets();
+    for config in markets {
+        let market_id = config.id.0.clone();
         state.engine.add_market(config)?;
-        info!("Added market: {}", id);
+        info!("Added market: {}", market_id);
     }
+
+    // Seed orderbooks with initial liquidity
+    seed_orderbooks(&state).await;
+
+    // Initialize demo agents with holdings
+    init_demo_agents(&state);
 
     // Start demo trading if enabled
     if cli.demo {
@@ -789,6 +1079,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/markets/:market/candles", get(get_candles))
         .route("/api/v1/orders", post(place_order))
         .route("/api/v1/orders/:market/:order_id", delete(cancel_order))
+        // Agents
+        .route("/api/v1/agents", get(get_agents))
         // WebSocket
         .route("/ws", get(ws_handler))
         // CORS

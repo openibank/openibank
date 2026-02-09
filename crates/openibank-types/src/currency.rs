@@ -89,6 +89,36 @@ pub enum CryptoCurrency {
     WETH,
     /// DAI stablecoin
     DAI,
+    /// XRP (Ripple)
+    XRP,
+    /// Cardano
+    ADA,
+    /// Dogecoin
+    DOGE,
+    /// Polkadot
+    DOT,
+    /// Chainlink
+    LINK,
+    /// Uniswap
+    UNI,
+    /// Aave
+    AAVE,
+    /// Sui
+    SUI,
+    /// Fetch.ai
+    FET,
+    /// Render Token
+    RNDR,
+    /// Bittensor
+    TAO,
+    /// NEAR Protocol
+    NEAR,
+    /// Worldcoin
+    WLD,
+    /// Binance Coin
+    BNB,
+    /// OpeniBank Token
+    OBK,
 }
 
 impl CryptoCurrency {
@@ -116,6 +146,21 @@ impl CryptoCurrency {
             Self::BASE => "BASE",
             Self::WETH => "WETH",
             Self::DAI => "DAI",
+            Self::XRP => "XRP",
+            Self::ADA => "ADA",
+            Self::DOGE => "DOGE",
+            Self::DOT => "DOT",
+            Self::LINK => "LINK",
+            Self::UNI => "UNI",
+            Self::AAVE => "AAVE",
+            Self::SUI => "SUI",
+            Self::FET => "FET",
+            Self::RNDR => "RNDR",
+            Self::TAO => "TAO",
+            Self::NEAR => "NEAR",
+            Self::WLD => "WLD",
+            Self::BNB => "BNB",
+            Self::OBK => "OBK",
         }
     }
 }

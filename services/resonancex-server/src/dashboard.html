@@ -505,6 +505,119 @@
             text-decoration: none;
         }
 
+        /* Market Dropdown */
+        .market-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+            min-width: 250px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .market-dropdown.show { display: block; }
+
+        .market-dropdown-item {
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .market-dropdown-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .market-dropdown-item.active {
+            background: var(--accent-glow);
+        }
+
+        .market-dropdown-item .pair {
+            font-weight: 600;
+        }
+
+        .market-dropdown-item .price {
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        /* Demo Wallet */
+        .wallet-panel {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .wallet-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .wallet-balances {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .wallet-item {
+            background: var(--bg-primary);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .wallet-currency {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .wallet-amount {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: monospace;
+        }
+
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .toast.success { border-left: 4px solid var(--buy); }
+        .toast.error { border-left: 4px solid var(--sell); }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .market-selector-wrapper {
+            position: relative;
+        }
+
         /* Scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
@@ -580,11 +693,14 @@
 
     <!-- Market Bar -->
     <div class="market-bar">
-        <div class="market-selector">
-            <span class="market-pair" id="current-market">ETH/IUSD</span>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
-            </svg>
+        <div class="market-selector-wrapper">
+            <div class="market-selector" onclick="toggleMarketDropdown()">
+                <span class="market-pair" id="current-market-display">ETH/IUSD</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                </svg>
+            </div>
+            <div class="market-dropdown" id="market-dropdown"></div>
         </div>
         <div class="market-price" id="current-price">$3,245.00</div>
         <div class="market-change positive" id="price-change">+2.34%</div>
@@ -648,6 +764,36 @@
 
         <!-- Order Forms -->
         <div class="panel order-panel">
+            <!-- Demo Wallet -->
+            <div class="wallet-panel" style="grid-column: span 2;">
+                <div class="wallet-title">Demo Wallet</div>
+                <div class="wallet-balances" id="wallet-balances">
+                    <div class="wallet-item">
+                        <div class="wallet-currency">IUSD</div>
+                        <div class="wallet-amount" id="balance-IUSD">100,000.00</div>
+                    </div>
+                    <div class="wallet-item">
+                        <div class="wallet-currency">BTC</div>
+                        <div class="wallet-amount" id="balance-BTC">1.00000000</div>
+                    </div>
+                    <div class="wallet-item">
+                        <div class="wallet-currency">ETH</div>
+                        <div class="wallet-amount" id="balance-ETH">10.0000</div>
+                    </div>
+                    <div class="wallet-item">
+                        <div class="wallet-currency">SOL</div>
+                        <div class="wallet-amount" id="balance-SOL">50.00</div>
+                    </div>
+                    <div class="wallet-item">
+                        <div class="wallet-currency">OBK</div>
+                        <div class="wallet-amount" id="balance-OBK">1,000.00</div>
+                    </div>
+                    <div class="wallet-item">
+                        <div class="wallet-currency">Total Value</div>
+                        <div class="wallet-amount" style="color: var(--accent);" id="total-value">~$250,000</div>
+                    </div>
+                </div>
+            </div>
             <!-- Buy Form -->
             <div class="order-form buy">
                 <div class="order-form-header">
@@ -713,13 +859,99 @@
         let volumeSeries = null;
         let totalTrades = 0;
         let totalVolume = 0;
+        let markets = [];
+        let demoWallet = {
+            IUSD: 100000,
+            BTC: 1,
+            ETH: 10,
+            SOL: 50,
+            OBK: 1000,
+            BNB: 5,
+            XRP: 1000,
+            DOGE: 5000
+        };
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            loadMarkets();
             initChart();
             initWebSocket();
             loadInitialData();
             setupEventListeners();
+        });
+
+        // Load all markets
+        async function loadMarkets() {
+            try {
+                const res = await fetch('/api/v1/markets');
+                const data = await res.json();
+                if (data.success) {
+                    markets = data.data;
+                    renderMarketDropdown();
+                }
+            } catch (e) {
+                console.error('Failed to load markets:', e);
+            }
+        }
+
+        // Market dropdown
+        function renderMarketDropdown() {
+            const dropdown = document.getElementById('market-dropdown');
+            dropdown.innerHTML = markets.map(m => `
+                <div class="market-dropdown-item ${m.id === currentMarket ? 'active' : ''}"
+                     onclick="selectMarket('${m.id}')">
+                    <span class="pair">${m.id.replace('_', '/')}</span>
+                    <span class="price">${m.base} / ${m.quote}</span>
+                </div>
+            `).join('');
+        }
+
+        function toggleMarketDropdown() {
+            const dropdown = document.getElementById('market-dropdown');
+            dropdown.classList.toggle('show');
+        }
+
+        function selectMarket(marketId) {
+            currentMarket = marketId;
+            document.getElementById('current-market-display').textContent = marketId.replace('_', '/');
+            document.getElementById('market-dropdown').classList.remove('show');
+
+            // Update form labels
+            const [base, quote] = marketId.split('_');
+            document.querySelectorAll('.form-label').forEach(label => {
+                if (label.textContent.includes('Amount')) {
+                    label.textContent = `Amount (${base})`;
+                }
+            });
+            document.querySelectorAll('.submit-btn.buy').forEach(btn => {
+                btn.textContent = `Buy ${base}`;
+            });
+            document.querySelectorAll('.submit-btn.sell').forEach(btn => {
+                btn.textContent = `Sell ${base}`;
+            });
+
+            // Reload data for new market
+            loadInitialData();
+            renderMarketDropdown();
+        }
+
+        // Toast notifications
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${type === 'success' ? '✓' : '✗'}</span>
+                <span>${message}</span>
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.market-selector-wrapper')) {
+                document.getElementById('market-dropdown').classList.remove('show');
+            }
         });
 
         // Chart
@@ -1025,12 +1257,12 @@
             const amount = document.getElementById(`${side}-amount`).value;
 
             if (!amount || parseFloat(amount) <= 0) {
-                alert('Please enter a valid amount');
+                showToast('Please enter a valid amount', 'error');
                 return;
             }
 
             if (orderType === 'limit' && (!price || parseFloat(price) <= 0)) {
-                alert('Please enter a valid price');
+                showToast('Please enter a valid price', 'error');
                 return;
             }
 
@@ -1054,18 +1286,59 @@
 
                 const data = await res.json();
                 if (data.success) {
-                    console.log('Order placed:', data.data);
+                    const orderInfo = data.data.order;
+                    const tradesCount = data.data.trades || 0;
+
+                    // Show success toast
+                    const [base] = currentMarket.split('_');
+                    const action = side === 'buy' ? 'Bought' : 'Sold';
+                    const status = orderInfo.status === 'Filled' ? 'filled' :
+                                   orderInfo.status === 'PartialFill' ? 'partially filled' : 'placed';
+                    showToast(`Order ${status}: ${action} ${orderInfo.filled} ${base}`, 'success');
+
                     // Clear form
                     document.getElementById(`${side}-price`).value = '';
                     document.getElementById(`${side}-amount`).value = '';
                     document.getElementById(`${side}-total`).value = '';
+
+                    // Update wallet display (demo simulation)
+                    updateDemoWallet(side, parseFloat(amount), parseFloat(price || orderInfo.price));
                 } else {
-                    alert('Order failed: ' + data.error);
+                    showToast('Order failed: ' + data.error, 'error');
                 }
             } catch (e) {
                 console.error('Order error:', e);
-                alert('Failed to place order');
+                showToast('Failed to place order', 'error');
             }
+        }
+
+        // Update demo wallet (simulation)
+        function updateDemoWallet(side, amount, price) {
+            const [base, quote] = currentMarket.split('_');
+            const total = amount * price;
+
+            if (side === 'buy') {
+                demoWallet[quote] = (demoWallet[quote] || 0) - total;
+                demoWallet[base] = (demoWallet[base] || 0) + amount;
+            } else {
+                demoWallet[base] = (demoWallet[base] || 0) - amount;
+                demoWallet[quote] = (demoWallet[quote] || 0) + total;
+            }
+
+            // Update display
+            Object.keys(demoWallet).forEach(currency => {
+                const el = document.getElementById(`balance-${currency}`);
+                if (el) {
+                    el.textContent = formatWalletBalance(demoWallet[currency], currency);
+                }
+            });
+        }
+
+        function formatWalletBalance(amount, currency) {
+            if (currency === 'BTC') return amount.toFixed(8);
+            if (currency === 'ETH' || currency === 'SOL') return amount.toFixed(4);
+            if (currency === 'IUSD') return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
         // Utilities

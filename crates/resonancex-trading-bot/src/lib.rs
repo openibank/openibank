@@ -106,11 +106,16 @@ pub struct BotConfig {
 impl Default for BotConfig {
     fn default() -> Self {
         Self {
-            api_url: "http://localhost:8080".to_string(),
-            ws_url: "ws://localhost:8081".to_string(),
+            api_url: "http://localhost:8888".to_string(),
+            ws_url: "ws://localhost:8888/ws".to_string(),
             api_key: None,
             api_secret: None,
-            markets: vec![MarketId::new("ETH_IUSD")],
+            markets: vec![
+                MarketId::new("BTC_IUSD"),
+                MarketId::new("ETH_IUSD"),
+                MarketId::new("SOL_IUSD"),
+                MarketId::new("OBK_IUSD"),
+            ],
             tick_interval_ms: 1000,
             max_position: dec!(10),
             max_orders: 10,

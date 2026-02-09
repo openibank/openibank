@@ -159,6 +159,7 @@ async fn main() {
     let app = Router::new()
         // Web dashboard
         .route("/", get(dashboard))
+        .route("/palm", get(palm_dashboard))
         // System APIs
         .route("/api/status", get(api_status))
         .route("/api/health", get(api_health))
@@ -173,6 +174,7 @@ async fn main() {
         .route("/api/fleet/deploy", post(api_fleet_deploy))
         // Agent management (delegate to system state)
         .route("/api/agents", get(api_list_agents))
+        .route("/api/agents/{id}", get(api_agent_detail))
         .route("/api/transactions", get(api_transactions))
         .route("/api/ledger/accounts", get(api_ledger_accounts))
         .route("/api/receipts", get(api_receipts))
@@ -290,6 +292,10 @@ async fn register_default_specs(fleet: &IBankFleetManager) {
 
 async fn dashboard() -> Html<String> {
     Html(DASHBOARD_HTML.to_string())
+}
+
+async fn palm_dashboard() -> Html<String> {
+    Html(PALM_DASHBOARD_HTML.to_string())
 }
 
 // ============================================================================
@@ -588,6 +594,61 @@ async fn api_list_agents(State(state): State<Arc<AppState>>) -> AxumJson<serde_j
         "agents": agents,
         "count": agents.len(),
     }))
+}
+
+async fn api_agent_detail(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> AxumJson<serde_json::Value> {
+    let registry = state.system.agents.read().await;
+
+    // Find agent by ID (could be full ID or partial match)
+    let agent = registry.agents.iter().find(|(key, _)| {
+        key.contains(&id) || *key == &id
+    });
+
+    match agent {
+        Some((agent_id, agent)) => {
+            let info = agent.to_api_info();
+            let res_id = ResonatorId::from_string(agent_id);
+            let iusd = AssetId::iusd();
+            let balance = state.system.ledger.balance(&res_id, &iusd).await;
+
+            // Get agent's transactions
+            let transactions: Vec<_> = registry
+                .transactions
+                .iter()
+                .filter(|tx| tx.buyer_id == *agent_id || tx.seller_id == *agent_id)
+                .cloned()
+                .collect();
+
+            // Get agent's receipts
+            let receipts: Vec<_> = registry
+                .receipts
+                .iter()
+                .filter(|r| r.actor == *agent_id)
+                .cloned()
+                .collect();
+
+            AxumJson(serde_json::json!({
+                "success": true,
+                "agent": {
+                    "id": agent_id,
+                    "info": info,
+                    "balance": balance.0,
+                    "balance_display": format!("${:.2}", balance.0 as f64 / 100.0),
+                },
+                "transactions": transactions,
+                "transaction_count": transactions.len(),
+                "receipts": receipts,
+                "receipt_count": receipts.len(),
+            }))
+        }
+        None => AxumJson(serde_json::json!({
+            "success": false,
+            "error": format!("Agent '{}' not found", id),
+        })),
+    }
 }
 
 async fn api_supply(State(state): State<Arc<AppState>>) -> AxumJson<serde_json::Value> {
@@ -1851,6 +1912,391 @@ setInterval(loadStatus, 10000);
 setInterval(loadFleet, 15000);
 setInterval(loadBalances, 5000);
 setInterval(loadReceipts, 8000);
+</script>
+</body>
+</html>"##;
+
+// ============================================================================
+// PALM Fleet Dashboard HTML
+// ============================================================================
+
+const PALM_DASHBOARD_HTML: &str = r##"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PALM Fleet Dashboard - OpeniBank</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border-bottom: 2px solid #ff6b35;
+    padding: 1.5rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .header h1 { color: #ff6b35; font-size: 1.8rem; letter-spacing: 3px; }
+  .header .subtitle { color: #888; font-size: 0.85rem; }
+  .header-right { display: flex; gap: 1rem; align-items: center; }
+  .nav-link {
+    color: #00d4ff;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border: 1px solid #2a2a3a;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+  .nav-link:hover { background: #1a1a2e; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    padding: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #12121a;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 1.5rem;
+  }
+  .card.full-width { grid-column: 1 / -1; }
+  .card h2 {
+    color: #ff6b35;
+    font-size: 1rem;
+    letter-spacing: 2px;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #2a2a3a;
+    padding-bottom: 0.5rem;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+  .stat-box {
+    background: #0a0a12;
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    padding: 1rem;
+    text-align: center;
+  }
+  .stat-box .value { font-size: 2rem; color: #00ff88; font-weight: bold; }
+  .stat-box .label { color: #888; font-size: 0.75rem; margin-top: 0.3rem; }
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+  .table th, .table td {
+    border-bottom: 1px solid #1a1a2a;
+    padding: 0.6rem 0.5rem;
+    text-align: left;
+  }
+  .table th {
+    color: #8ba0c8;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .mono { font-family: inherit; color: #86e1ff; }
+  .status-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: bold;
+  }
+  .status-healthy { background: #0a3d2a; color: #00ff88; }
+  .status-unhealthy { background: #3d1a1a; color: #ff4444; }
+  .status-pending { background: #3d3a1a; color: #ffcc00; }
+  .btn {
+    background: #ff6b35;
+    color: #0a0a0f;
+    border: none;
+    padding: 0.5rem 1rem;
+    font-family: inherit;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-right: 0.5rem;
+    font-size: 0.8rem;
+  }
+  .btn:hover { background: #ff8855; }
+  .btn-secondary {
+    background: #1a2236;
+    color: #86e1ff;
+    border: 1px solid #2d3c5d;
+  }
+  .btn-secondary:hover { background: #22304d; }
+  .deploy-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+  .deploy-form select, .deploy-form input {
+    background: #0a0a12;
+    border: 1px solid #2a2a3a;
+    color: #e0e0e0;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+  .agent-card {
+    background: #0a0a12;
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .agent-card:hover { border-color: #ff6b35; }
+  .agent-card .agent-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .agent-card .agent-name { color: #00d4ff; font-weight: bold; }
+  .agent-card .agent-role { color: #888; font-size: 0.8rem; }
+  .agent-card .agent-balance { color: #00ff88; font-size: 0.9rem; }
+  .live-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: #00ff88;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .footer {
+    text-align: center;
+    padding: 2rem;
+    color: #444;
+    font-size: 0.8rem;
+    border-top: 1px solid #1a1a2a;
+  }
+  .footer a { color: #ff6b35; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>PALM FLEET</h1>
+    <div class="subtitle"><span class="live-dot"></span>Persistent Agent Lifecycle Manager</div>
+  </div>
+  <div class="header-right">
+    <a href="/" class="nav-link">← Main Dashboard</a>
+    <a href="/api/fleet/status" class="nav-link">API</a>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card full-width">
+    <h2>FLEET OVERVIEW</h2>
+    <div class="stat-grid" id="fleet-stats">
+      <div class="stat-box"><div class="value" id="stat-specs">-</div><div class="label">Agent Specs</div></div>
+      <div class="stat-box"><div class="value" id="stat-instances">-</div><div class="label">Total Instances</div></div>
+      <div class="stat-box"><div class="value" id="stat-healthy">-</div><div class="label">Healthy</div></div>
+      <div class="stat-box"><div class="value" id="stat-unhealthy">-</div><div class="label">Unhealthy</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>AGENT SPECIFICATIONS</h2>
+    <table class="table" id="specs-table">
+      <thead>
+        <tr><th>Name</th><th>Version</th><th>Autonomy</th><th>Capabilities</th></tr>
+      </thead>
+      <tbody id="specs-body">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>DEPLOY AGENTS</h2>
+    <p style="color: #888; font-size: 0.8rem; margin-bottom: 1rem;">Deploy new agent instances from registered specifications.</p>
+    <div class="deploy-form">
+      <select id="deploy-type">
+        <option value="buyer">Buyer Agent</option>
+        <option value="seller">Seller Agent</option>
+        <option value="arbiter">Arbiter Agent</option>
+        <option value="issuer">Issuer Agent</option>
+        <option value="auditor">Auditor Agent</option>
+        <option value="compliance">Compliance Agent</option>
+      </select>
+      <input type="number" id="deploy-count" value="1" min="1" max="10" style="width: 60px;">
+      <button class="btn" onclick="deployAgents()">DEPLOY</button>
+    </div>
+    <div id="deploy-result" style="margin-top: 1rem; color: #888; font-size: 0.8rem;"></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>ACTIVE AGENTS</h2>
+    <div id="agents-list">Loading agents...</div>
+  </div>
+
+  <div class="card full-width">
+    <h2>FLEET HEALTH THRESHOLDS</h2>
+    <table class="table">
+      <thead>
+        <tr><th>Metric</th><th>Warning</th><th>Critical</th><th>Current</th><th>Status</th></tr>
+      </thead>
+      <tbody id="health-body">
+        <tr>
+          <td>Memory Usage</td><td>70%</td><td>90%</td><td class="mono">45%</td>
+          <td><span class="status-badge status-healthy">OK</span></td>
+        </tr>
+        <tr>
+          <td>CPU Usage</td><td>80%</td><td>95%</td><td class="mono">23%</td>
+          <td><span class="status-badge status-healthy">OK</span></td>
+        </tr>
+        <tr>
+          <td>Active Connections</td><td>1000</td><td>5000</td><td class="mono">42</td>
+          <td><span class="status-badge status-healthy">OK</span></td>
+        </tr>
+        <tr>
+          <td>Error Rate</td><td>1%</td><td>5%</td><td class="mono">0.0%</td>
+          <td><span class="status-badge status-healthy">OK</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">
+  <a href="https://www.openibank.com">openibank.com</a> &middot;
+  PALM - Persistent Agent Lifecycle Manager &middot;
+  Part of the Maple AI Framework
+</div>
+
+<script>
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function money(cents) {
+  return `$${(Number(cents || 0) / 100).toFixed(2)}`;
+}
+
+async function loadFleetStatus() {
+  try {
+    const res = await fetch('/api/fleet/status');
+    const data = await res.json();
+    document.getElementById('stat-specs').textContent = data.total_specs || 0;
+    document.getElementById('stat-instances').textContent = data.total_instances || 0;
+    document.getElementById('stat-healthy').textContent = data.healthy_instances || 0;
+    document.getElementById('stat-unhealthy').textContent = data.unhealthy_instances || 0;
+  } catch (e) {
+    console.error('Failed to load fleet status:', e);
+  }
+}
+
+async function loadSpecs() {
+  try {
+    const res = await fetch('/api/fleet/specs');
+    const data = await res.json();
+    const tbody = document.getElementById('specs-body');
+    const specs = data.specs || [];
+
+    if (!specs.length) {
+      tbody.innerHTML = '<tr><td colspan="4">No specs registered</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = specs.map(s => `
+      <tr>
+        <td class="mono">${escapeHtml(s.name)}</td>
+        <td>${escapeHtml(s.version)}</td>
+        <td>${escapeHtml(s.autonomy)}</td>
+        <td style="font-size: 0.7rem; color: #666;">${escapeHtml((s.capabilities || []).join(', '))}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    console.error('Failed to load specs:', e);
+  }
+}
+
+async function loadAgents() {
+  try {
+    const res = await fetch('/api/agents');
+    const data = await res.json();
+    const container = document.getElementById('agents-list');
+    const agents = data.agents || [];
+
+    if (!agents.length) {
+      container.innerHTML = '<p style="color: #666;">No active agents. Deploy some using the form above.</p>';
+      return;
+    }
+
+    container.innerHTML = agents.map(a => `
+      <div class="agent-card" onclick="viewAgent('${escapeHtml(a.id)}')">
+        <div class="agent-header">
+          <div>
+            <span class="agent-name">${escapeHtml(a.name || a.id)}</span>
+            <span class="agent-role">${escapeHtml(a.role || 'Unknown')}</span>
+          </div>
+          <div class="agent-balance">${a.balance != null ? money(a.balance) : '-'}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p style="color: #ff4444;">Error loading agents</p>';
+  }
+}
+
+async function deployAgents() {
+  const agentType = document.getElementById('deploy-type').value;
+  const count = parseInt(document.getElementById('deploy-count').value) || 1;
+  const resultEl = document.getElementById('deploy-result');
+
+  resultEl.textContent = 'Deploying...';
+
+  try {
+    const res = await fetch('/api/fleet/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_type: agentType, count }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      resultEl.innerHTML = `<span style="color: #00ff88;">✓ Deployed ${data.instances_deployed} ${agentType} agent(s)</span>`;
+      loadFleetStatus();
+      loadAgents();
+    } else {
+      resultEl.innerHTML = `<span style="color: #ff4444;">✗ ${data.error || 'Deployment failed'}</span>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<span style="color: #ff4444;">✗ Error: ${e.message}</span>`;
+  }
+}
+
+function viewAgent(id) {
+  window.location.href = `/api/agents/${id}`;
+}
+
+// Initial load
+loadFleetStatus();
+loadSpecs();
+loadAgents();
+
+// Auto-refresh
+setInterval(loadFleetStatus, 10000);
+setInterval(loadAgents, 5000);
 </script>
 </body>
 </html>"##;
