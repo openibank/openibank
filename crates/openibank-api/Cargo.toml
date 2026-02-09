@@ -3,15 +3,58 @@ name = "openibank-api"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "REST, gRPC, and WebSocket API for OpeniBank"
+description = "Production-grade REST API for OpeniBank - Binance-compatible trading endpoints"
 
 [dependencies]
+# Core OpeniBank crates
 openibank-types = { workspace = true }
+openibank-db = { workspace = true }
+openibank-auth = { workspace = true }
+resonancex-types = { workspace = true }
+
+# Web framework
+axum = { workspace = true }
+axum-extra = { version = "0.9", features = ["typed-header", "query"] }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace", "compression-gzip", "request-id"] }
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+futures-util = "0.3"
+
+# Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
-axum = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true }
+
+# Types
+uuid = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+hex = "0.4"
+
+# Error handling
 thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Tracing
 tracing = { workspace = true }
+
+# HTTP types
+http = "1.0"
+headers = "0.4"
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# OpenAPI documentation
+utoipa = { version = "4", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-swagger-ui = { version = "7", features = ["axum"] }
+
+# WebSocket
+tokio-tungstenite = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+axum-test = "14"

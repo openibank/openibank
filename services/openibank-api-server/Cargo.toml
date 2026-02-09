@@ -1,0 +1,55 @@
+[package]
+name = "openibank-api-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Production-ready API server for OpeniBank - Binance-compatible trading platform"
+
+[[bin]]
+name = "openibank-api-server"
+path = "src/main.rs"
+
+[dependencies]
+# Core OpeniBank crates
+openibank-types = { workspace = true }
+openibank-db = { workspace = true }
+openibank-auth = { workspace = true }
+openibank-api = { workspace = true }
+
+# Web framework
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace", "compression-gzip", "request-id"] }
+
+# Async runtime
+tokio = { workspace = true, features = ["full", "signal"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Configuration
+config = { version = "0.14", features = ["toml", "json", "yaml"] }
+dotenvy = "0.15"
+
+# Tracing & Logging
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+
+# Metrics
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Health checks
+hyper = { version = "1.0" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+axum-test = "14"

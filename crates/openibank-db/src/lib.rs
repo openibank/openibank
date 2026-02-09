@@ -158,6 +158,35 @@ impl Database {
     pub fn cache(&self) -> cache::CacheManager {
         cache::CacheManager::new(self.redis.clone())
     }
+
+    /// Create a mock database for testing (panics if called at runtime)
+    /// This is only for unit tests that don't actually need database access
+    #[cfg(any(test, feature = "mock"))]
+    pub fn new_mock() -> Self {
+        use std::sync::OnceLock;
+
+        // Create a dummy pool that will panic if actually used
+        // This is fine for unit tests that mock database calls
+        static MOCK_PG: OnceLock<PgPool> = OnceLock::new();
+        static MOCK_REDIS: OnceLock<RedisPool> = OnceLock::new();
+
+        let pg = MOCK_PG.get_or_init(|| {
+            // Create a pool with a fake URL - it will fail to connect but that's ok for mocking
+            futures::executor::block_on(async {
+                PgPoolOptions::new()
+                    .max_connections(1)
+                    .connect_lazy("postgresql://mock:mock@localhost/mock")
+                    .expect("Failed to create mock pool")
+            })
+        }).clone();
+
+        let redis = MOCK_REDIS.get_or_init(|| {
+            let cfg = RedisConfig::from_url("redis://localhost:6379");
+            cfg.create_pool(Some(Runtime::Tokio1)).expect("Failed to create mock redis pool")
+        }).clone();
+
+        Self { pg, redis }
+    }
 }
 
 /// Health status of database connections

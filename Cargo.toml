@@ -51,9 +51,14 @@ members = [
     "services/openibank-playground",
     "services/openibank-mcp",
     "services/openibank-server",
+    "services/openibank-api-server",
+    "services/openibank-portal",
 
     # Database Layer
     "crates/openibank-db",
+
+    # Authentication Layer
+    "crates/openibank-auth",
 
     # ResonanceX Exchange
     "crates/resonancex-types",
@@ -70,6 +75,12 @@ members = [
 
     # ResonanceX Server
     "services/resonancex-server",
+
+    # Marketplace Server
+    "services/openibank-marketplace-server",
+
+    # Web Landing Page
+    "services/openibank-web",
 ]
 
 [workspace.package]
@@ -198,6 +209,9 @@ openibank-api = { path = "crates/openibank-api" }
 
 # Database Layer
 openibank-db = { path = "crates/openibank-db" }
+
+# Authentication Layer
+openibank-auth = { path = "crates/openibank-auth" }
 
 # ResonanceX Exchange crates
 resonancex-types = { path = "crates/resonancex-types" }

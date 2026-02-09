@@ -1,0 +1,43 @@
+[package]
+name = "openibank-marketplace-server"
+version = "0.1.0"
+edition = "2021"
+description = "OpenIBank Agent Service Marketplace - A production-ready marketplace for financial agent services"
+authors = ["OpenIBank Team"]
+license = "MIT"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono", "uuid"] }
+
+# Authentication
+jsonwebtoken = "9.0"
+bcrypt = "0.15"
+
+# Utilities
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+
+# Configuration
+dotenvy = "0.15"
+
+[dev-dependencies]
+tokio-test = "0.4"

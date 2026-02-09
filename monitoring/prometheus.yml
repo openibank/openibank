@@ -1,0 +1,113 @@
+# OpeniBank Prometheus Configuration
+# ===================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  external_labels:
+    monitor: 'openibank-monitor'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files
+rule_files: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # OpeniBank Unified Server
+  - job_name: 'openibank-server'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['openibank-server:8080']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'unified-server'
+
+  # OpeniBank API Server
+  - job_name: 'openibank-api-server'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['openibank-api-server:3000']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'api-server'
+
+  # ResonanceX Trading Server
+  - job_name: 'resonancex-server'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['resonancex-server:8888']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'trading-exchange'
+
+  # OpeniBank Issuer
+  - job_name: 'openibank-issuer'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['openibank-issuer:8081']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'iusd-issuer'
+
+  # OpeniBank Marketplace
+  - job_name: 'openibank-marketplace'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['openibank-marketplace:3007']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'marketplace'
+
+  # OpeniBank Portal
+  - job_name: 'openibank-portal'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['openibank-portal:9000']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'portal'
+
+  # OpeniBank Playground
+  - job_name: 'openibank-playground'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['openibank-playground:8080']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'playground'
+
+  # PostgreSQL (if using postgres_exporter)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'database'
+
+  # Redis (if using redis_exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'cache'

@@ -1,0 +1,56 @@
+# =============================================================================
+# OpeniBank API Server - Default Configuration
+# =============================================================================
+# This file contains default settings that can be overridden by:
+# 1. config/local.toml (for local development)
+# 2. Environment variables (prefixed with OPENIBANK__)
+# 3. Command-line arguments
+# =============================================================================
+
+[server]
+host = "0.0.0.0"
+port = 3000
+workers = 0  # 0 = auto-detect CPU cores
+tls_enabled = false
+request_timeout_secs = 30
+shutdown_timeout_secs = 30
+
+[database]
+postgres_url = "postgres://openibank:openibank@localhost:5432/openibank"
+max_connections = 100
+min_connections = 5
+connect_timeout_secs = 30
+idle_timeout_secs = 600
+run_migrations = true
+
+# [redis]
+# url = "redis://localhost:6379"
+# pool_size = 20
+
+[auth]
+jwt_secret = "change-me-in-production"
+jwt_issuer = "openibank"
+jwt_audience = "openibank-api"
+access_token_lifetime_secs = 3600      # 1 hour
+refresh_token_lifetime_secs = 604800   # 7 days
+enable_api_keys = true
+rate_limit_per_minute = 1200
+
+[api]
+enable_cors = true
+cors_origins = ["*"]
+enable_compression = true
+enable_tracing = true
+max_body_size = 10485760  # 10MB
+api_prefix = "/api/v1"
+
+[logging]
+level = "info"
+format = "pretty"  # "json" for production
+log_requests = true
+slow_request_threshold_ms = 1000
+
+[metrics]
+enabled = true
+path = "/metrics"
+port = 9090

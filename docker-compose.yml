@@ -1,21 +1,135 @@
+# OpeniBank - Complete Platform Docker Compose
+# ==============================================
+#
+# Quick Start:
+#   docker-compose up -d
+#
+# Services:
+#   - Landing Page:    http://localhost:3080
+#   - Portal:          http://localhost:9000
+#   - API Server:      http://localhost:3000
+#   - Trading:         http://localhost:8888
+#   - Marketplace:     http://localhost:3007
+#   - Playground:      http://localhost:8082
+#   - Grafana:         http://localhost:3001
+#   - Prometheus:      http://localhost:9090
+#
+# ==============================================
+
 version: "3.9"
 
 services:
-  openibank:
-    build:
-      context: ..
-      dockerfile: openibank/Dockerfile
-    ports:
-      - "${OPENIBANK_PORT:-8080}:8080"
+  # ===========================================
+  # Infrastructure
+  # ===========================================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: openibank-postgres
     environment:
+      POSTGRES_USER: openibank
+      POSTGRES_PASSWORD: openibank_secret
+      POSTGRES_DB: openibank
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openibank"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openibank-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: openibank-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openibank-network
+
+  # ===========================================
+  # Core Services
+  # ===========================================
+
+  openibank-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=openibank-web
+    container_name: openibank-web
+    ports:
+      - "3080:3080"
+    environment:
+      - RUST_LOG=info
+      - PORT=3080
+    networks:
+      - openibank-network
+    restart: unless-stopped
+
+  openibank-portal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=openibank-portal
+    container_name: openibank-portal
+    ports:
+      - "9000:9000"
+    environment:
+      - RUST_LOG=info
+      - PORT=9000
+      - UNIFIED_SERVER_URL=http://openibank-server:8080
+      - API_SERVER_URL=http://openibank-api-server:3000
+      - RESONANCEX_URL=http://resonancex-server:8888
+      - ISSUER_URL=http://openibank-issuer:8081
+    depends_on:
+      - openibank-server
+      - openibank-api-server
+      - resonancex-server
+      - openibank-issuer
+    networks:
+      - openibank-network
+    restart: unless-stopped
+
+  openibank-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=openibank-server
+    container_name: openibank-server
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgres://openibank:openibank_secret@postgres:5432/openibank
+      - REDIS_URL=redis://redis:6379
+      - PORT=8080
       - OPENIBANK_HOST=0.0.0.0
       - OPENIBANK_PORT=8080
-      - RUST_LOG=${RUST_LOG:-info}
       # LLM configuration (optional)
       - OPENIBANK_LLM_PROVIDER=${OPENIBANK_LLM_PROVIDER:-}
       - OLLAMA_HOST=${OLLAMA_HOST:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - openibank-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
@@ -23,15 +137,176 @@ services:
       timeout: 10s
       retries: 3
 
-  # Optional: Local LLM with Ollama
+  openibank-api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=openibank-api-server
+    container_name: openibank-api-server
+    ports:
+      - "3000:3000"
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgres://openibank:openibank_secret@postgres:5432/openibank
+      - REDIS_URL=redis://redis:6379
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-your-production-jwt-secret-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - openibank-network
+    restart: unless-stopped
+
+  resonancex-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=resonancex-server
+    container_name: resonancex-server
+    ports:
+      - "8888:8888"
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgres://openibank:openibank_secret@postgres:5432/openibank
+      - REDIS_URL=redis://redis:6379
+      - PORT=8888
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - openibank-network
+    restart: unless-stopped
+
+  openibank-issuer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=openibank-issuer-resonator
+    container_name: openibank-issuer
+    ports:
+      - "8081:8081"
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgres://openibank:openibank_secret@postgres:5432/openibank
+      - PORT=8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - openibank-network
+    restart: unless-stopped
+
+  openibank-marketplace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=openibank-marketplace-server
+    container_name: openibank-marketplace
+    ports:
+      - "3007:3007"
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgres://openibank:openibank_secret@postgres:5432/openibank
+      - PORT=3007
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - openibank-network
+    restart: unless-stopped
+
+  openibank-playground:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SERVICE=openibank-playground
+    container_name: openibank-playground
+    ports:
+      - "8082:8080"
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgres://openibank:openibank_secret@postgres:5432/openibank
+      - API_SERVER_URL=http://openibank-api-server:3000
+      - RESONANCEX_URL=http://resonancex-server:8888
+    depends_on:
+      - openibank-api-server
+      - resonancex-server
+    networks:
+      - openibank-network
+    restart: unless-stopped
+
+  # ===========================================
+  # Optional: Local LLM
+  # ===========================================
+
   ollama:
     image: ollama/ollama:latest
+    container_name: openibank-ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     profiles:
       - llm
+    networks:
+      - openibank-network
+
+  # ===========================================
+  # Monitoring Stack
+  # ===========================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: openibank-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+    networks:
+      - openibank-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: openibank-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+    networks:
+      - openibank-network
+
+networks:
+  openibank-network:
+    driver: bridge
 
 volumes:
+  postgres_data:
+  redis_data:
   ollama_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,34 @@
+[package]
+name = "openibank-portal"
+version.workspace = true
+edition.workspace = true
+description = "OpeniBank Portal Dashboard - Unified entry point to all services"
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Web framework
+axum = { workspace = true }
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP client for health checks
+reqwest = { workspace = true }
+
+# Middleware
+tower = { workspace = true }
+tower-http = { version = "0.5", features = ["cors", "compression-gzip", "trace"] }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Time handling
+chrono = { workspace = true }
+
+# Async utilities
+futures = { workspace = true }
+tokio-stream = "0.1"

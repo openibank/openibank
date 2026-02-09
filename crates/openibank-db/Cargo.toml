@@ -20,6 +20,7 @@ redis = { version = "0.25", features = ["tokio-comp", "json"] }
 # Async
 tokio = { workspace = true }
 async-trait = { workspace = true }
+futures = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
@@ -39,6 +40,10 @@ tracing = { workspace = true }
 
 # Config
 dotenvy = "0.15"
+
+[features]
+default = []
+mock = []
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

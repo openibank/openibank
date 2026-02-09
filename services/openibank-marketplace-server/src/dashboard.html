@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenIBank Marketplace - Agent Services</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        },
+                        surface: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .hero-pattern {
+            background-color: #0f172a;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%234f46e5' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .modal-backdrop {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(4px);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: skeleton 1.5s infinite;
+        }
+
+        @keyframes skeleton {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .star-rating {
+            color: #fbbf24;
+        }
+
+        .verified-badge {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .feature-tag {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            color: #4338ca;
+        }
+
+        .pricing-popular {
+            border: 2px solid #6366f1;
+            position: relative;
+        }
+
+        .pricing-popular::before {
+            content: 'Most Popular';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            padding: 2px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .tab-active {
+            border-bottom: 2px solid #6366f1;
+            color: #4f46e5;
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-surface-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-surface-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="flex items-center space-x-3">
+                        <div class="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center">
+                            <i class="fas fa-store text-white text-lg"></i>
+                        </div>
+                        <div>
+                            <span class="text-xl font-bold text-surface-900">OpenIBank</span>
+                            <span class="text-xl font-light text-surface-500 ml-1">Marketplace</span>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <div class="relative hidden md:block">
+                        <input type="text" id="nav-search" placeholder="Search services..."
+                            class="w-80 pl-10 pr-4 py-2 border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-surface-400"></i>
+                    </div>
+                    <button class="text-surface-600 hover:text-surface-900">
+                        <i class="fas fa-bell text-lg"></i>
+                    </button>
+                    <button onclick="showModal('auth-modal')" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-medium text-sm">
+                        Sign In
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-pattern text-white py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto">
+                <h1 class="text-4xl md:text-5xl font-bold mb-6">
+                    Discover Financial <span class="text-primary-400">Agent Services</span>
+                </h1>
+                <p class="text-xl text-surface-300 mb-8">
+                    Browse our curated marketplace of AI-powered trading bots, data analytics, risk management tools, and more. Built by verified agents for modern financial applications.
+                </p>
+                <div class="relative max-w-2xl mx-auto">
+                    <input type="text" id="hero-search" placeholder="Search for trading bots, analytics, risk tools..."
+                        class="w-full pl-12 pr-4 py-4 rounded-xl text-surface-900 focus:outline-none focus:ring-4 focus:ring-primary-500/50 text-lg">
+                    <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-surface-400 text-xl"></i>
+                    <button onclick="performSearch()" class="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-medium">
+                        Search
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-16 max-w-4xl mx-auto">
+                <div class="text-center">
+                    <div id="stat-services" class="text-3xl font-bold text-white">-</div>
+                    <div class="text-surface-400 text-sm">Services</div>
+                </div>
+                <div class="text-center">
+                    <div id="stat-agents" class="text-3xl font-bold text-white">-</div>
+                    <div class="text-surface-400 text-sm">Verified Agents</div>
+                </div>
+                <div class="text-center">
+                    <div id="stat-installs" class="text-3xl font-bold text-white">-</div>
+                    <div class="text-surface-400 text-sm">Total Installs</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-white">99.9%</div>
+                    <div class="text-surface-400 text-sm">Uptime</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Categories Section -->
+    <section class="py-12 bg-white border-b border-surface-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-2xl font-bold text-surface-900 mb-6">Browse by Category</h2>
+            <div id="categories-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+                <!-- Categories will be loaded here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Featured Services -->
+    <section class="py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h2 class="text-2xl font-bold text-surface-900">Featured Services</h2>
+                    <p class="text-surface-500 mt-1">Hand-picked by our team for exceptional quality</p>
+                </div>
+                <a href="#all-services" class="text-primary-600 hover:text-primary-700 font-medium flex items-center">
+                    View All <i class="fas fa-arrow-right ml-2"></i>
+                </a>
+            </div>
+            <div id="featured-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Featured services will be loaded here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- All Services Section -->
+    <section id="all-services" class="py-12 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row gap-8">
+                <!-- Filters Sidebar -->
+                <aside class="lg:w-64 flex-shrink-0">
+                    <div class="bg-surface-50 rounded-xl p-6 sticky top-24">
+                        <h3 class="font-semibold text-surface-900 mb-4">Filters</h3>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-surface-700 mb-2">Category</label>
+                            <select id="filter-category" class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                                <option value="">All Categories</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-surface-700 mb-2">Minimum Rating</label>
+                            <select id="filter-rating" class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                                <option value="">Any Rating</option>
+                                <option value="4.5">4.5+ Stars</option>
+                                <option value="4">4+ Stars</option>
+                                <option value="3.5">3.5+ Stars</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="checkbox" id="filter-verified" class="w-4 h-4 text-primary-600 border-surface-300 rounded focus:ring-primary-500">
+                                <span class="text-sm text-surface-700">Verified Only</span>
+                            </label>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-surface-700 mb-2">Sort By</label>
+                            <select id="filter-sort" class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                                <option value="installs">Most Popular</option>
+                                <option value="rating">Highest Rated</option>
+                                <option value="newest">Newest</option>
+                            </select>
+                        </div>
+
+                        <button onclick="applyFilters()" class="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition font-medium text-sm">
+                            Apply Filters
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- Services Grid -->
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-bold text-surface-900">All Services</h2>
+                        <span id="services-count" class="text-surface-500 text-sm"></span>
+                    </div>
+                    <div id="services-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        <!-- Services will be loaded here -->
+                    </div>
+                    <div id="pagination" class="flex justify-center mt-8 space-x-2">
+                        <!-- Pagination will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Service Detail Modal -->
+    <div id="service-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="hideModal('service-modal')"></div>
+        <div class="absolute inset-4 md:inset-10 lg:inset-16 bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col fade-in">
+            <div id="service-modal-content" class="flex-1 overflow-y-auto">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Agent Profile Modal -->
+    <div id="agent-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="hideModal('agent-modal')"></div>
+        <div class="absolute inset-4 md:inset-10 lg:inset-20 bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col fade-in">
+            <div id="agent-modal-content" class="flex-1 overflow-y-auto">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div id="review-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="hideModal('review-modal')"></div>
+        <div class="absolute inset-x-4 top-1/2 -translate-y-1/2 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-lg bg-white rounded-2xl overflow-hidden shadow-2xl fade-in">
+            <div id="review-modal-content" class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold text-surface-900">Write a Review</h3>
+                    <button onclick="hideModal('review-modal')" class="text-surface-400 hover:text-surface-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <form id="review-form" onsubmit="submitReview(event)">
+                    <input type="hidden" id="review-service-id">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-surface-700 mb-2">Rating</label>
+                        <div id="rating-stars" class="flex space-x-2">
+                            <button type="button" onclick="setRating(1)" class="text-2xl text-surface-300 hover:text-yellow-400"><i class="fas fa-star"></i></button>
+                            <button type="button" onclick="setRating(2)" class="text-2xl text-surface-300 hover:text-yellow-400"><i class="fas fa-star"></i></button>
+                            <button type="button" onclick="setRating(3)" class="text-2xl text-surface-300 hover:text-yellow-400"><i class="fas fa-star"></i></button>
+                            <button type="button" onclick="setRating(4)" class="text-2xl text-surface-300 hover:text-yellow-400"><i class="fas fa-star"></i></button>
+                            <button type="button" onclick="setRating(5)" class="text-2xl text-surface-300 hover:text-yellow-400"><i class="fas fa-star"></i></button>
+                        </div>
+                        <input type="hidden" id="review-rating" value="5">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-surface-700 mb-2">Title</label>
+                        <input type="text" id="review-title" required class="w-full border border-surface-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Summarize your experience">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-surface-700 mb-2">Review</label>
+                        <textarea id="review-content" required rows="4" class="w-full border border-surface-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Share your experience with this service..."></textarea>
+                    </div>
+                    <button type="submit" class="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700 transition font-medium">
+                        Submit Review
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="hideModal('auth-modal')"></div>
+        <div class="absolute inset-x-4 top-1/2 -translate-y-1/2 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl fade-in">
+            <div class="p-8">
+                <div class="text-center mb-8">
+                    <div class="w-16 h-16 gradient-bg rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-store text-white text-2xl"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-surface-900">Welcome Back</h3>
+                    <p class="text-surface-500 mt-2">Sign in to manage your services</p>
+                </div>
+                <form>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-surface-700 mb-2">Email</label>
+                        <input type="email" class="w-full border border-surface-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="you@company.com">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-surface-700 mb-2">Password</label>
+                        <input type="password" class="w-full border border-surface-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Enter your password">
+                    </div>
+                    <button type="button" onclick="hideModal('auth-modal')" class="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700 transition font-semibold">
+                        Sign In
+                    </button>
+                </form>
+                <p class="text-center text-sm text-surface-500 mt-6">
+                    Don't have an account? <a href="#" class="text-primary-600 hover:text-primary-700 font-medium">Sign up</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-surface-900 text-white py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                <div>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
+                            <i class="fas fa-store text-white text-sm"></i>
+                        </div>
+                        <span class="font-bold">OpenIBank</span>
+                    </div>
+                    <p class="text-surface-400 text-sm">The premier marketplace for financial agent services.</p>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4">Products</h4>
+                    <ul class="space-y-2 text-surface-400 text-sm">
+                        <li><a href="#" class="hover:text-white">Trading Bots</a></li>
+                        <li><a href="#" class="hover:text-white">Data Analytics</a></li>
+                        <li><a href="#" class="hover:text-white">Risk Management</a></li>
+                        <li><a href="#" class="hover:text-white">Compliance Tools</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4">Developers</h4>
+                    <ul class="space-y-2 text-surface-400 text-sm">
+                        <li><a href="#" class="hover:text-white">Documentation</a></li>
+                        <li><a href="#" class="hover:text-white">API Reference</a></li>
+                        <li><a href="#" class="hover:text-white">SDKs</a></li>
+                        <li><a href="#" class="hover:text-white">Changelog</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4">Company</h4>
+                    <ul class="space-y-2 text-surface-400 text-sm">
+                        <li><a href="#" class="hover:text-white">About</a></li>
+                        <li><a href="#" class="hover:text-white">Blog</a></li>
+                        <li><a href="#" class="hover:text-white">Careers</a></li>
+                        <li><a href="#" class="hover:text-white">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-surface-800 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
+                <p class="text-surface-400 text-sm">2024 OpenIBank. All rights reserved.</p>
+                <div class="flex space-x-6 mt-4 md:mt-0">
+                    <a href="#" class="text-surface-400 hover:text-white"><i class="fab fa-twitter"></i></a>
+                    <a href="#" class="text-surface-400 hover:text-white"><i class="fab fa-github"></i></a>
+                    <a href="#" class="text-surface-400 hover:text-white"><i class="fab fa-linkedin"></i></a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // State
+        let categories = [];
+        let currentRating = 5;
+
+        // Category icons mapping
+        const categoryIcons = {
+            'trading-bots': 'fa-chart-line',
+            'data-analysis': 'fa-chart-bar',
+            'risk-management': 'fa-shield-halved',
+            'payment-processing': 'fa-credit-card',
+            'fraud-detection': 'fa-triangle-exclamation',
+            'kyc-aml': 'fa-user-check',
+            'market-data': 'fa-database',
+            'portfolio-management': 'fa-briefcase'
+        };
+
+        // Format numbers
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        // Star rating HTML
+        function getStarsHtml(rating) {
+            let html = '';
+            const fullStars = Math.floor(rating);
+            const hasHalf = rating % 1 >= 0.5;
+
+            for (let i = 0; i < fullStars; i++) {
+                html += '<i class="fas fa-star"></i>';
+            }
+            if (hasHalf) {
+                html += '<i class="fas fa-star-half-alt"></i>';
+            }
+            for (let i = fullStars + (hasHalf ? 1 : 0); i < 5; i++) {
+                html += '<i class="far fa-star"></i>';
+            }
+            return html;
+        }
+
+        // Modal functions
+        function showModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function hideModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('stat-services').textContent = data.data.total_services;
+                    document.getElementById('stat-agents').textContent = data.data.total_agents;
+                    document.getElementById('stat-installs').textContent = formatNumber(data.data.total_installs);
+                    categories = data.data.categories;
+                    renderCategories();
+                    populateCategoryFilter();
+                }
+            } catch (e) {
+                console.error('Error loading stats:', e);
+            }
+        }
+
+        // Render categories
+        function renderCategories() {
+            const grid = document.getElementById('categories-grid');
+            grid.innerHTML = categories.map(cat => `
+                <button onclick="filterByCategory('${cat.id}')"
+                    class="flex flex-col items-center p-4 bg-surface-50 rounded-xl hover:bg-surface-100 transition group">
+                    <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center mb-2 group-hover:bg-primary-200 transition">
+                        <i class="fas ${categoryIcons[cat.id] || 'fa-cube'} text-primary-600 text-lg"></i>
+                    </div>
+                    <span class="text-sm font-medium text-surface-900 text-center">${cat.name}</span>
+                    <span class="text-xs text-surface-500">${cat.service_count} services</span>
+                </button>
+            `).join('');
+        }
+
+        // Populate category filter
+        function populateCategoryFilter() {
+            const select = document.getElementById('filter-category');
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.name;
+                select.appendChild(option);
+            });
+        }
+
+        // Load featured services
+        async function loadFeatured() {
+            try {
+                const res = await fetch('/api/featured');
+                const data = await res.json();
+                if (data.success) {
+                    renderServiceCards('featured-grid', data.data);
+                }
+            } catch (e) {
+                console.error('Error loading featured:', e);
+            }
+        }
+
+        // Load all services
+        async function loadServices(params = {}) {
+            try {
+                const queryString = new URLSearchParams(params).toString();
+                const res = await fetch(`/api/services?${queryString}`);
+                const data = await res.json();
+                if (data.success) {
+                    renderServiceCards('services-grid', data.data);
+                    document.getElementById('services-count').textContent = `${data.meta.total} services found`;
+                    renderPagination(data.meta);
+                }
+            } catch (e) {
+                console.error('Error loading services:', e);
+            }
+        }
+
+        // Render service cards
+        function renderServiceCards(containerId, services) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = services.map(service => `
+                <div class="bg-white rounded-xl border border-surface-200 overflow-hidden card-hover cursor-pointer" onclick="showServiceDetail('${service.id}')">
+                    <div class="relative h-32 bg-gradient-to-r from-primary-600 to-primary-400 overflow-hidden">
+                        ${service.banner_url ? `<img src="${service.banner_url}" alt="" class="w-full h-full object-cover opacity-50">` : ''}
+                        <div class="absolute top-3 right-3 flex space-x-2">
+                            ${service.is_verified ? `
+                                <span class="verified-badge text-white text-xs font-medium px-2 py-1 rounded-full flex items-center">
+                                    <i class="fas fa-check-circle mr-1"></i> Verified
+                                </span>
+                            ` : ''}
+                            ${service.is_featured ? `
+                                <span class="bg-yellow-500 text-white text-xs font-medium px-2 py-1 rounded-full flex items-center">
+                                    <i class="fas fa-star mr-1"></i> Featured
+                                </span>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="p-5">
+                        <div class="flex items-start space-x-3 mb-3">
+                            <img src="${service.icon_url}" alt="${service.name}" class="w-12 h-12 rounded-xl bg-surface-100">
+                            <div class="flex-1 min-w-0">
+                                <h3 class="font-semibold text-surface-900 truncate">${service.name}</h3>
+                                <p class="text-sm text-surface-500">by Agent</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-surface-600 mb-4 line-clamp-2">${service.short_description}</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            ${service.features.slice(0, 3).map(f => `
+                                <span class="feature-tag text-xs px-2 py-1 rounded-full">${f}</span>
+                            `).join('')}
+                        </div>
+                        <div class="flex items-center justify-between pt-3 border-t border-surface-100">
+                            <div class="flex items-center space-x-1">
+                                <span class="star-rating text-sm">${getStarsHtml(service.avg_rating)}</span>
+                                <span class="text-sm text-surface-600">${service.avg_rating.toFixed(1)}</span>
+                                <span class="text-sm text-surface-400">(${service.total_reviews})</span>
+                            </div>
+                            <div class="text-sm text-surface-500">
+                                <i class="fas fa-download mr-1"></i> ${formatNumber(service.total_installs)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Render pagination
+        function renderPagination(meta) {
+            const container = document.getElementById('pagination');
+            if (meta.total_pages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            for (let i = 1; i <= meta.total_pages; i++) {
+                html += `
+                    <button onclick="loadServices({page: ${i}})"
+                        class="${i === meta.page ? 'bg-primary-600 text-white' : 'bg-white text-surface-700 hover:bg-surface-100'}
+                        px-4 py-2 rounded-lg border border-surface-200 text-sm font-medium transition">
+                        ${i}
+                    </button>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        // Filter by category
+        function filterByCategory(categoryId) {
+            document.getElementById('filter-category').value = categoryId;
+            applyFilters();
+            document.getElementById('all-services').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Apply filters
+        function applyFilters() {
+            const params = {};
+            const category = document.getElementById('filter-category').value;
+            const rating = document.getElementById('filter-rating').value;
+            const verified = document.getElementById('filter-verified').checked;
+            const sort = document.getElementById('filter-sort').value;
+
+            if (category) params.category = category;
+            if (rating) params.min_rating = rating;
+            if (verified) params.verified_only = true;
+            if (sort) params.sort_by = sort;
+
+            loadServices(params);
+        }
+
+        // Perform search
+        function performSearch() {
+            const query = document.getElementById('hero-search').value || document.getElementById('nav-search').value;
+            if (query) {
+                loadServices({ q: query });
+                document.getElementById('all-services').scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // Show service detail
+        async function showServiceDetail(serviceId) {
+            showModal('service-modal');
+            const content = document.getElementById('service-modal-content');
+            content.innerHTML = '<div class="flex items-center justify-center h-64"><div class="animate-spin rounded-full h-12 w-12 border-4 border-primary-600 border-t-transparent"></div></div>';
+
+            try {
+                const [serviceRes, reviewsRes] = await Promise.all([
+                    fetch(`/api/services/${serviceId}`),
+                    fetch(`/api/services/${serviceId}/reviews`)
+                ]);
+                const serviceData = await serviceRes.json();
+                const reviewsData = await reviewsRes.json();
+
+                if (serviceData.success) {
+                    const service = serviceData.data;
+                    const reviews = reviewsData.data || [];
+
+                    content.innerHTML = `
+                        <!-- Header -->
+                        <div class="relative h-48 bg-gradient-to-r from-primary-600 to-primary-400">
+                            ${service.banner_url ? `<img src="${service.banner_url}" alt="" class="w-full h-full object-cover opacity-30">` : ''}
+                            <button onclick="hideModal('service-modal')" class="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+
+                        <div class="px-8 pb-8">
+                            <!-- Service Info -->
+                            <div class="flex items-start space-x-4 -mt-12 mb-6">
+                                <img src="${service.icon_url}" alt="${service.name}" class="w-24 h-24 rounded-2xl bg-white border-4 border-white shadow-lg">
+                                <div class="pt-14">
+                                    <div class="flex items-center space-x-3 mb-1">
+                                        <h2 class="text-2xl font-bold text-surface-900">${service.name}</h2>
+                                        ${service.is_verified ? `
+                                            <span class="verified-badge text-white text-xs font-medium px-2 py-1 rounded-full">
+                                                <i class="fas fa-check-circle mr-1"></i> Verified
+                                            </span>
+                                        ` : ''}
+                                    </div>
+                                    <p class="text-surface-600">${service.short_description}</p>
+                                </div>
+                            </div>
+
+                            <!-- Stats Row -->
+                            <div class="flex items-center space-x-8 mb-8 pb-6 border-b border-surface-200">
+                                <div class="flex items-center space-x-2">
+                                    <span class="star-rating">${getStarsHtml(service.avg_rating)}</span>
+                                    <span class="font-semibold text-surface-900">${service.avg_rating.toFixed(1)}</span>
+                                    <span class="text-surface-500">(${service.total_reviews} reviews)</span>
+                                </div>
+                                <div class="text-surface-600">
+                                    <i class="fas fa-download mr-1"></i> ${formatNumber(service.total_installs)} installs
+                                </div>
+                                <div class="text-surface-600">
+                                    <i class="fas fa-code mr-1"></i> ${service.integration_type}
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <!-- Main Content -->
+                                <div class="lg:col-span-2">
+                                    <!-- Tabs -->
+                                    <div class="flex space-x-6 border-b border-surface-200 mb-6">
+                                        <button class="pb-3 text-sm font-medium tab-active" onclick="showTab('overview')">Overview</button>
+                                        <button class="pb-3 text-sm font-medium text-surface-500 hover:text-surface-900" onclick="showTab('pricing')">Pricing</button>
+                                        <button class="pb-3 text-sm font-medium text-surface-500 hover:text-surface-900" onclick="showTab('reviews')">Reviews</button>
+                                        <button class="pb-3 text-sm font-medium text-surface-500 hover:text-surface-900" onclick="showTab('integration')">Integration</button>
+                                    </div>
+
+                                    <!-- Overview Tab -->
+                                    <div id="tab-overview">
+                                        <div class="prose max-w-none">
+                                            <div class="text-surface-700 whitespace-pre-line">${service.long_description}</div>
+                                        </div>
+
+                                        <div class="mt-8">
+                                            <h4 class="font-semibold text-surface-900 mb-3">Features</h4>
+                                            <div class="flex flex-wrap gap-2">
+                                                ${service.features.map(f => `
+                                                    <span class="feature-tag px-3 py-1 rounded-full text-sm">${f}</span>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-8">
+                                            <h4 class="font-semibold text-surface-900 mb-3">Supported Protocols</h4>
+                                            <div class="flex flex-wrap gap-2">
+                                                ${service.supported_protocols.map(p => `
+                                                    <span class="bg-surface-100 text-surface-700 px-3 py-1 rounded-full text-sm">${p}</span>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Pricing Tab (hidden by default) -->
+                                    <div id="tab-pricing" class="hidden">
+                                        <div class="grid grid-cols-1 md:grid-cols-${Math.min(service.pricing_tiers.length, 3)} gap-4">
+                                            ${service.pricing_tiers.map((tier, i) => `
+                                                <div class="border ${i === 1 ? 'pricing-popular' : 'border-surface-200'} rounded-xl p-6">
+                                                    <h4 class="font-semibold text-surface-900">${tier.name}</h4>
+                                                    <div class="mt-2 mb-4">
+                                                        <span class="text-3xl font-bold text-surface-900">$${tier.price}</span>
+                                                        <span class="text-surface-500">/${tier.billing_period}</span>
+                                                    </div>
+                                                    <ul class="space-y-3 mb-6">
+                                                        ${tier.features.map(f => `
+                                                            <li class="flex items-start text-sm text-surface-600">
+                                                                <i class="fas fa-check text-green-500 mr-2 mt-0.5"></i>
+                                                                ${f}
+                                                            </li>
+                                                        `).join('')}
+                                                    </ul>
+                                                    <button class="w-full ${i === 1 ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-surface-100 text-surface-700 hover:bg-surface-200'} py-2 rounded-lg transition font-medium text-sm">
+                                                        Get Started
+                                                    </button>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+
+                                    <!-- Reviews Tab (hidden by default) -->
+                                    <div id="tab-reviews" class="hidden">
+                                        <div class="flex items-center justify-between mb-6">
+                                            <h4 class="font-semibold text-surface-900">Customer Reviews</h4>
+                                            <button onclick="showReviewModal('${service.id}')" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">
+                                                Write a Review
+                                            </button>
+                                        </div>
+                                        ${reviews.length > 0 ? reviews.map(review => `
+                                            <div class="border-b border-surface-100 pb-6 mb-6 last:border-0">
+                                                <div class="flex items-start space-x-3">
+                                                    <img src="${review.user_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=user'}" alt="" class="w-10 h-10 rounded-full">
+                                                    <div class="flex-1">
+                                                        <div class="flex items-center space-x-2 mb-1">
+                                                            <span class="font-medium text-surface-900">${review.user_name}</span>
+                                                            ${review.verified_purchase ? `
+                                                                <span class="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Verified Purchase</span>
+                                                            ` : ''}
+                                                        </div>
+                                                        <div class="flex items-center space-x-2 mb-2">
+                                                            <span class="star-rating text-sm">${getStarsHtml(review.rating)}</span>
+                                                            <span class="text-xs text-surface-400">${new Date(review.created_at).toLocaleDateString()}</span>
+                                                        </div>
+                                                        <h5 class="font-medium text-surface-900 mb-1">${review.title}</h5>
+                                                        <p class="text-sm text-surface-600">${review.content}</p>
+                                                        <button class="text-sm text-surface-500 hover:text-surface-700 mt-2">
+                                                            <i class="far fa-thumbs-up mr-1"></i> Helpful (${review.helpful_count})
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `).join('') : `
+                                            <div class="text-center py-12 text-surface-500">
+                                                <i class="far fa-comment-dots text-4xl mb-3"></i>
+                                                <p>No reviews yet. Be the first to review!</p>
+                                            </div>
+                                        `}
+                                    </div>
+
+                                    <!-- Integration Tab (hidden by default) -->
+                                    <div id="tab-integration" class="hidden">
+                                        <h4 class="font-semibold text-surface-900 mb-4">Quick Start Guide</h4>
+                                        <div class="bg-surface-900 rounded-xl p-6 mb-6">
+                                            <div class="flex items-center justify-between mb-3">
+                                                <span class="text-surface-400 text-sm">Install via npm</span>
+                                                <button class="text-surface-400 hover:text-white text-sm"><i class="fas fa-copy"></i></button>
+                                            </div>
+                                            <code class="text-green-400 text-sm">npm install @openibank/${service.slug}</code>
+                                        </div>
+
+                                        <h4 class="font-semibold text-surface-900 mb-4">Basic Usage</h4>
+                                        <div class="bg-surface-900 rounded-xl p-6 overflow-x-auto">
+                                            <pre class="text-sm"><code class="text-surface-300">import { ${service.name.replace(/\s+/g, '')} } from '@openibank/${service.slug}';
+
+const client = new ${service.name.replace(/\s+/g, '')}({
+  apiKey: process.env.OPENIBANK_API_KEY,
+});
+
+// Initialize the service
+const result = await client.initialize();
+console.log(result);</code></pre>
+                                        </div>
+
+                                        ${service.documentation_url ? `
+                                            <div class="mt-6">
+                                                <a href="${service.documentation_url}" target="_blank" class="inline-flex items-center text-primary-600 hover:text-primary-700 font-medium">
+                                                    <i class="fas fa-book mr-2"></i> View Full Documentation
+                                                    <i class="fas fa-external-link-alt ml-2 text-xs"></i>
+                                                </a>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+
+                                <!-- Sidebar -->
+                                <div>
+                                    <div class="bg-surface-50 rounded-xl p-6 sticky top-4">
+                                        <button class="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700 transition font-semibold mb-3">
+                                            <i class="fas fa-rocket mr-2"></i> Get Started
+                                        </button>
+                                        <button class="w-full bg-white text-surface-700 border border-surface-200 py-3 rounded-lg hover:bg-surface-100 transition font-medium mb-6">
+                                            <i class="fas fa-code mr-2"></i> View API Docs
+                                        </button>
+
+                                        <div class="space-y-4 text-sm">
+                                            <div class="flex justify-between">
+                                                <span class="text-surface-500">Category</span>
+                                                <span class="text-surface-900 font-medium">${categories.find(c => c.id === service.category_id)?.name || service.category_id}</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span class="text-surface-500">Integration</span>
+                                                <span class="text-surface-900 font-medium">${service.integration_type}</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span class="text-surface-500">Updated</span>
+                                                <span class="text-surface-900 font-medium">${new Date(service.updated_at).toLocaleDateString()}</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="border-t border-surface-200 mt-6 pt-6">
+                                            <h4 class="font-medium text-surface-900 mb-3">Tags</h4>
+                                            <div class="flex flex-wrap gap-2">
+                                                ${service.tags.map(tag => `
+                                                    <span class="bg-surface-200 text-surface-700 px-2 py-1 rounded text-xs">${tag}</span>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+
+                                        ${service.website_url ? `
+                                            <div class="border-t border-surface-200 mt-6 pt-6">
+                                                <a href="${service.website_url}" target="_blank" class="flex items-center text-primary-600 hover:text-primary-700 text-sm">
+                                                    <i class="fas fa-globe mr-2"></i> Visit Website
+                                                    <i class="fas fa-external-link-alt ml-auto text-xs"></i>
+                                                </a>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                content.innerHTML = '<div class="p-8 text-center text-red-500">Error loading service details</div>';
+                console.error('Error loading service:', e);
+            }
+        }
+
+        // Tab switching
+        function showTab(tabName) {
+            const tabs = ['overview', 'pricing', 'reviews', 'integration'];
+            tabs.forEach(tab => {
+                const el = document.getElementById(`tab-${tab}`);
+                if (el) {
+                    if (tab === tabName) {
+                        el.classList.remove('hidden');
+                    } else {
+                        el.classList.add('hidden');
+                    }
+                }
+            });
+        }
+
+        // Show agent profile
+        async function showAgentProfile(agentId) {
+            showModal('agent-modal');
+            const content = document.getElementById('agent-modal-content');
+            content.innerHTML = '<div class="flex items-center justify-center h-64"><div class="animate-spin rounded-full h-12 w-12 border-4 border-primary-600 border-t-transparent"></div></div>';
+
+            try {
+                const [agentRes, servicesRes, reviewsRes] = await Promise.all([
+                    fetch(`/api/agents/${agentId}`),
+                    fetch(`/api/agents/${agentId}/services`),
+                    fetch(`/api/agents/${agentId}/reviews`)
+                ]);
+
+                const agentData = await agentRes.json();
+                const servicesData = await servicesRes.json();
+                const reviewsData = await reviewsRes.json();
+
+                if (agentData.success) {
+                    const agent = agentData.data;
+                    const services = servicesData.data || [];
+                    const reviews = reviewsData.data || [];
+
+                    content.innerHTML = `
+                        <div class="p-8">
+                            <button onclick="hideModal('agent-modal')" class="absolute top-4 right-4 w-10 h-10 bg-surface-100 hover:bg-surface-200 rounded-full flex items-center justify-center text-surface-500 transition">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+
+                            <!-- Agent Header -->
+                            <div class="flex items-start space-x-6 mb-8">
+                                <img src="${agent.logo_url}" alt="${agent.name}" class="w-24 h-24 rounded-2xl bg-surface-100">
+                                <div>
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <h2 class="text-2xl font-bold text-surface-900">${agent.name}</h2>
+                                        ${agent.is_verified ? `
+                                            <span class="verified-badge text-white text-xs font-medium px-2 py-1 rounded-full">
+                                                <i class="fas fa-check-circle mr-1"></i> ${agent.verification_badge || 'Verified'}
+                                            </span>
+                                        ` : ''}
+                                    </div>
+                                    <p class="text-surface-600 mb-4">${agent.description}</p>
+                                    <div class="flex items-center space-x-6 text-sm">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="star-rating">${getStarsHtml(agent.avg_rating)}</span>
+                                            <span class="font-medium">${agent.avg_rating.toFixed(1)}</span>
+                                        </div>
+                                        <div class="text-surface-600">
+                                            <i class="fas fa-cube mr-1"></i> ${agent.total_services} services
+                                        </div>
+                                        <div class="text-surface-600">
+                                            <i class="fas fa-download mr-1"></i> ${formatNumber(agent.total_installs)} installs
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Services -->
+                            <div class="mb-8">
+                                <h3 class="text-lg font-semibold text-surface-900 mb-4">Services by ${agent.name}</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    ${services.map(service => `
+                                        <div class="border border-surface-200 rounded-xl p-4 hover:border-primary-300 transition cursor-pointer" onclick="hideModal('agent-modal'); showServiceDetail('${service.id}')">
+                                            <div class="flex items-start space-x-3">
+                                                <img src="${service.icon_url}" alt="${service.name}" class="w-12 h-12 rounded-xl bg-surface-100">
+                                                <div class="flex-1 min-w-0">
+                                                    <h4 class="font-medium text-surface-900 truncate">${service.name}</h4>
+                                                    <p class="text-sm text-surface-500 line-clamp-2">${service.short_description}</p>
+                                                    <div class="flex items-center space-x-3 mt-2 text-sm">
+                                                        <span class="star-rating">${getStarsHtml(service.avg_rating)}</span>
+                                                        <span class="text-surface-400">${formatNumber(service.total_installs)} installs</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <!-- Contact -->
+                            <div class="bg-surface-50 rounded-xl p-6">
+                                <h3 class="font-semibold text-surface-900 mb-4">Contact & Links</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    ${agent.website_url ? `
+                                        <a href="${agent.website_url}" target="_blank" class="flex items-center text-primary-600 hover:text-primary-700">
+                                            <i class="fas fa-globe mr-2 w-5"></i> Website
+                                        </a>
+                                    ` : ''}
+                                    ${agent.support_email ? `
+                                        <a href="mailto:${agent.support_email}" class="flex items-center text-primary-600 hover:text-primary-700">
+                                            <i class="fas fa-envelope mr-2 w-5"></i> ${agent.support_email}
+                                        </a>
+                                    ` : ''}
+                                    ${Object.entries(agent.social_links || {}).map(([name, url]) => `
+                                        <a href="${url}" target="_blank" class="flex items-center text-primary-600 hover:text-primary-700">
+                                            <i class="fab fa-${name} mr-2 w-5"></i> ${name.charAt(0).toUpperCase() + name.slice(1)}
+                                        </a>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                content.innerHTML = '<div class="p-8 text-center text-red-500">Error loading agent profile</div>';
+                console.error('Error loading agent:', e);
+            }
+        }
+
+        // Review functions
+        function showReviewModal(serviceId) {
+            document.getElementById('review-service-id').value = serviceId;
+            setRating(5);
+            showModal('review-modal');
+        }
+
+        function setRating(rating) {
+            currentRating = rating;
+            document.getElementById('review-rating').value = rating;
+            const stars = document.getElementById('rating-stars').querySelectorAll('button');
+            stars.forEach((star, i) => {
+                if (i < rating) {
+                    star.classList.remove('text-surface-300');
+                    star.classList.add('text-yellow-400');
+                } else {
+                    star.classList.remove('text-yellow-400');
+                    star.classList.add('text-surface-300');
+                }
+            });
+        }
+
+        async function submitReview(event) {
+            event.preventDefault();
+            const serviceId = document.getElementById('review-service-id').value;
+            const rating = parseInt(document.getElementById('review-rating').value);
+            const title = document.getElementById('review-title').value;
+            const content = document.getElementById('review-content').value;
+
+            try {
+                const res = await fetch(`/api/services/${serviceId}/reviews`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rating, title, content })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    hideModal('review-modal');
+                    showServiceDetail(serviceId);
+                }
+            } catch (e) {
+                console.error('Error submitting review:', e);
+            }
+        }
+
+        // Search handlers
+        document.getElementById('hero-search').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        document.getElementById('nav-search').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStats();
+            loadFeatured();
+            loadServices();
+        });
+    </script>
+</body>
+</html>
