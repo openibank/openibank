@@ -44,7 +44,7 @@ use resonancex_types::{
     MarketConfig, MarketId, MarketStatus, Candle, CandleInterval, DepthSnapshot,
     Ticker, DepthLevel,
 };
-use resonancex_engine::{MatchingEngine, EngineConfig, SubmitResult};
+use resonancex_engine::{MatchingEngine, EngineConfig};
 use openibank_types::{AgentId, WalletId, PermitId, Currency};
 
 // ============================================================================
@@ -855,6 +855,39 @@ fn create_demo_agents() -> Vec<(String, String, HashMap<String, Decimal>)> {
     ]
 }
 
+/// Create a stable UUID from a name string (deterministic)
+fn stable_agent_id(name: &str) -> AgentId {
+    use std::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
+
+    let mut hasher = DefaultHasher::new();
+    name.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    // Create a UUID from the hash bytes
+    let bytes: [u8; 16] = [
+        (hash >> 56) as u8,
+        (hash >> 48) as u8,
+        (hash >> 40) as u8,
+        (hash >> 32) as u8,
+        (hash >> 24) as u8,
+        (hash >> 16) as u8,
+        (hash >> 8) as u8,
+        hash as u8,
+        // Second half with a different seed
+        ((hash >> 56) ^ 0xAB) as u8,
+        ((hash >> 48) ^ 0xCD) as u8,
+        ((hash >> 40) ^ 0xEF) as u8,
+        ((hash >> 32) ^ 0x12) as u8,
+        ((hash >> 24) ^ 0x34) as u8,
+        ((hash >> 16) ^ 0x56) as u8,
+        ((hash >> 8) ^ 0x78) as u8,
+        (hash ^ 0x9A) as u8,
+    ];
+
+    AgentId(uuid::Uuid::from_bytes(bytes))
+}
+
 /// Initialize demo agents with their holdings
 fn init_demo_agents(state: &AppState) {
     let demo_agents = create_demo_agents();
@@ -862,10 +895,7 @@ fn init_demo_agents(state: &AppState) {
 
     for (name, _role, holdings) in demo_agents {
         // Create a stable agent ID from the name
-        let agent_id = AgentId(uuid::Uuid::new_v5(
-            &uuid::Uuid::NAMESPACE_DNS,
-            name.as_bytes(),
-        ));
+        let agent_id = stable_agent_id(&name);
 
         // Convert holdings to string format for storage
         let mut agent_holdings = HashMap::new();
@@ -887,10 +917,7 @@ async fn get_agents(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .into_iter()
         .map(|(name, role, _initial_holdings)| {
             // Get agent ID from name
-            let agent_id = AgentId(uuid::Uuid::new_v5(
-                &uuid::Uuid::NAMESPACE_DNS,
-                name.as_bytes(),
-            ));
+            let agent_id = stable_agent_id(&name);
 
             // Get current holdings from state
             let holdings = balances
