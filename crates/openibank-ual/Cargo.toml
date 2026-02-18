@@ -8,9 +8,9 @@ description = "UAL (Universal Agent Language) integration for OpeniBank banking 
 
 [dependencies]
 # UAL (Maple)
-ual-types = { path = "../../../maple/crates/ual-types" }
-ual-parser = { path = "../../../maple/crates/ual-parser" }
-ual-compiler = { path = "../../../maple/crates/ual-compiler" }
+ual-types = { path = "../../../maple/crates/ual/types" }
+ual-parser = { path = "../../../maple/crates/ual/parser" }
+ual-compiler = { path = "../../../maple/crates/ual/compiler" }
 
 # Maple core
 rcf-types = { workspace = true }

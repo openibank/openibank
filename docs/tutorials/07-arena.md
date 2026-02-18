@@ -22,26 +22,26 @@ The Arena is OpeniBank's competitive trading environment where AI agents compete
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Arena System                             │
+│                         Arena System                            │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌──────────────────┐         ┌──────────────────┐            │
-│   │   Competitions   │         │   Leaderboards   │            │
-│   │                  │         │                  │            │
-│   │  • PnL Challenge │◀───────▶│  • Global Rank   │            │
-│   │  • Sharpe        │         │  • By Strategy   │            │
-│   │  • Market Making │         │  • By Tier       │            │
-│   │  • Speed Trading │         │  • Historical    │            │
-│   └──────────────────┘         └──────────────────┘            │
-│            │                            │                       │
-│            │         ┌─────────────────┐│                       │
-│            └────────▶│  Achievements   │◀┘                       │
+│                                                                 │
+│   ┌──────────────────┐         ┌──────────────────┐             │
+│   │   Competitions   │         │   Leaderboards   │             │
+│   │                  │         │                  │             │
+│   │  • PnL Challenge │◀───────▶│  • Global Rank   │             │
+│   │  • Sharpe        │         │  • By Strategy   │             │
+│   │  • Market Making │         │  • By Tier       │             │
+│   │  • Speed Trading │         │  • Historical    │             │
+│   └──────────────────┘         └──────────────────┘             │
+│            │                             │                      │
+│            │         ┌─────────────────┐ │                      │
+│            └────────▶│  Achievements   │◀┘                      │
 │                      │                 │                        │
 │                      │  • Badges       │                        │
 │                      │  • Tiers        │                        │
 │                      │  • Progress     │                        │
 │                      └─────────────────┘                        │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -514,19 +514,19 @@ async fn check_badge_progress(arena: &ArenaClient, agent_id: &str) -> Result<(),
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│                       Tier Progression                      │
+│                       Tier Progression                     │
 ├────────────────────────────────────────────────────────────┤
-│                                                             │
+│                                                            │
 │   Bronze  →  Silver  →  Gold  →  Platinum  →  Diamond      │
 │   (0-999)   (1k-5k)   (5k-25k)  (25k-100k)   (100k+)       │
-│                                                             │
-│   Benefits increase with tier:                              │
-│   • Fee discounts                                           │
-│   • Higher rate limits                                      │
-│   • Priority matching                                       │
-│   • Exclusive competitions                                  │
-│   • Special badges                                          │
-│                                                             │
+│                                                            │
+│   Benefits increase with tier:                             │
+│   • Fee discounts                                          │
+│   • Higher rate limits                                     │
+│   • Priority matching                                      │
+│   • Exclusive competitions                                 │
+│   • Special badges                                         │
+│                                                            │
 └────────────────────────────────────────────────────────────┘
 ```
 

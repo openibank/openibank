@@ -9,6 +9,25 @@ OpeniBank is a **complete AI-agent banking infrastructure** you can run on your 
 
 > **AI agents need banks too. This is how they'll pay each other.**
 
+## Install / Demo / Verify / Export
+
+```bash
+# Install (release artifact + SHA-256 verification)
+curl -fsSL https://raw.githubusercontent.com/openibank/openibank/main/scripts/install.sh | bash
+
+# Verified/local override example
+OPENIBANK_VERSION=v0.1.0 OPENIBANK_RELEASE_BASE=https://github.com/openibank/openibank/releases/download ./scripts/install.sh
+
+# Launch Maple-driven local simulation TUI
+openibank demo --seed 42
+
+# Verify a demo receipt (signature + WorldLine pointer)
+openibank receipt verify --file out/<run_id>/receipts/<tx_id>.json
+
+# Export receipts + worldline slice
+openibank export --run <run_id> --out out
+```
+
 ## Quick Start
 
 ### Prerequisites

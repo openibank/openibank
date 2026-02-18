@@ -22,28 +22,28 @@ Multi-agent coordination is at the heart of OpeniBank's vision. In this tutorial
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                Multi-Agent Coordination Layer                    │
+│                Multi-Agent Coordination Layer                   │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌────────────┐     ┌────────────┐     ┌────────────┐         │
-│   │  Buyer A   │     │  Seller B  │     │ Arbiter C  │         │
-│   │ Resonator  │     │ Resonator  │     │ Resonator  │         │
-│   └─────┬──────┘     └─────┬──────┘     └─────┬──────┘         │
+│                                                                 │
+│   ┌────────────┐     ┌────────────┐     ┌────────────┐          │
+│   │  Buyer A   │     │  Seller B  │     │ Arbiter C  │          │
+│   │ Resonator  │     │ Resonator  │     │ Resonator  │          │
+│   └─────┬──────┘     └─────┬──────┘     └─────┬──────┘          │
 │         │                  │                  │                 │
-│   ┌─────▼──────────────────▼──────────────────▼─────┐          │
+│   ┌─────▼──────────────────▼──────────────────▼──────┐          │
 │   │              Resonance Coupling Layer            │          │
 │   │                                                  │          │
-│   │   • Message Routing    • State Synchronization  │          │
-│   │   • Commitment Tracking • Conflict Resolution   │          │
+│   │   • Message Routing    • State Synchronization   │          │
+│   │   • Commitment Tracking • Conflict Resolution    │          │
 │   └──────────────────────────────────────────────────┘          │
-│                           │                                      │
+│                           │                                     │
 │   ┌───────────────────────▼──────────────────────────┐          │
 │   │              Authority & Accountability          │          │
 │   │                     Service (AAS)                │          │
 │   │                                                  │          │
-│   │   • Identity    • Capability Grants   • Audit   │          │
+│   │   • Identity    • Capability Grants   • Audit    │          │
 │   └──────────────────────────────────────────────────┘          │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

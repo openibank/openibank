@@ -1,191 +1,171 @@
-#!/bin/bash
-# OpeniBank Installer
-# Usage: curl -sSL https://openibank.com/install.sh | bash
-#
-# This script installs the OpeniBank CLI and optionally sets up Ollama for local LLM support.
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+BIN_NAME="openibank"
+DEFAULT_VERSION="v0.1.0"
+RELEASE_BASE_DEFAULT="https://github.com/openibank/openibank/releases/download"
+INSTALL_DIR_DEFAULT="${HOME}/.local/bin"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+VERSION="${OPENIBANK_VERSION:-$DEFAULT_VERSION}"
+RELEASE_BASE="${OPENIBANK_RELEASE_BASE:-$RELEASE_BASE_DEFAULT}"
+INSTALL_DIR="${OPENIBANK_INSTALL_DIR:-$INSTALL_DIR_DEFAULT}"
 
-# Banner
-echo -e "${MAGENTA}"
-cat << 'BANNER'
-╔═══════════════════════════════════════════════════════════════╗
-║                                                               ║
-║    🏦 OpeniBank - Banking for AI Agents                       ║
-║                                                               ║
-║    AI agents need banks too.                                  ║
-║    This is how they'll pay each other.                        ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
-BANNER
-echo -e "${NC}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Detect OS
-OS="unknown"
-case "$(uname -s)" in
-    Linux*)     OS="linux";;
-    Darwin*)    OS="macos";;
-    MINGW*|MSYS*|CYGWIN*) OS="windows";;
-esac
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/install.sh
+  scripts/install.sh --dev
 
-# Detect architecture
-ARCH="unknown"
-case "$(uname -m)" in
-    x86_64|amd64)  ARCH="x86_64";;
-    aarch64|arm64) ARCH="aarch64";;
-esac
+Environment variables:
+  OPENIBANK_VERSION       Release tag (default: v0.1.0)
+  OPENIBANK_RELEASE_BASE  Release base URL (default: GitHub Releases download URL)
+  OPENIBANK_INSTALL_DIR   Install directory (default: ~/.local/bin)
 
-echo -e "${CYAN}Detected: ${OS} / ${ARCH}${NC}"
-echo ""
+Modes:
+  default     Download release artifact, verify SHA-256 with checksums.txt, install binary
+  --dev       Print sibling-repo development install instructions (expects ../maple)
+USAGE
+}
 
-# Installation directory
-INSTALL_DIR="${HOME}/.openibank"
-BIN_DIR="${INSTALL_DIR}/bin"
+detect_target() {
+  local os arch
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "${os}/${arch}" in
+    Darwin/arm64|Darwin/aarch64) echo "aarch64-apple-darwin" ;;
+    Darwin/x86_64) echo "x86_64-apple-darwin" ;;
+    Linux/x86_64) echo "x86_64-unknown-linux-gnu" ;;
+    Linux/aarch64) echo "aarch64-unknown-linux-gnu" ;;
+    *)
+      echo "unsupported platform: ${os}/${arch}" >&2
+      return 1
+      ;;
+  esac
+}
 
-mkdir -p "$BIN_DIR"
+sha256_file() {
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+    return 0
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
+    return 0
+  fi
+  echo "missing sha256 tool (need sha256sum or shasum)" >&2
+  return 1
+}
 
-# Check if we should build from source (cargo available) or download binary
-if command -v cargo &> /dev/null; then
-    echo -e "${GREEN}✓ Rust/Cargo detected. Building from source...${NC}"
-    echo ""
+dev_mode() {
+  local maple_dir maple_rev
+  maple_dir="$(cd "${REPO_ROOT}/.." && pwd)/maple"
 
-    # Clone or update maple (required dependency - must be sibling to openibank)
-    if [ -d "${INSTALL_DIR}/maple" ]; then
-        echo -e "${BLUE}Updating maple framework...${NC}"
-        cd "${INSTALL_DIR}/maple"
-        git pull origin main 2>/dev/null || true
-    else
-        echo -e "${BLUE}Cloning maple framework (required dependency)...${NC}"
-        git clone https://github.com/mapleaiorg/maple.git "${INSTALL_DIR}/maple" 2>/dev/null || {
-            echo -e "${YELLOW}Could not auto-clone maple. You may need to clone it manually:${NC}"
-            echo "  git clone <maple-repo-url> ${INSTALL_DIR}/maple"
-        }
-    fi
-
-    # Clone or update openibank
-    if [ -d "${INSTALL_DIR}/src" ]; then
-        echo -e "${BLUE}Updating existing installation...${NC}"
-        cd "${INSTALL_DIR}/src"
-        git pull origin main 2>/dev/null || true
-    else
-        echo -e "${BLUE}Cloning OpeniBank repository...${NC}"
-        git clone https://github.com/openibank/openibank.git "${INSTALL_DIR}/src" 2>/dev/null || {
-            echo -e "${YELLOW}Git clone failed. Checking for local source...${NC}"
-            if [ -f "Cargo.toml" ] && grep -q "openibank" Cargo.toml 2>/dev/null; then
-                INSTALL_DIR="$(pwd)/.."
-                echo -e "${GREEN}✓ Using local source directory${NC}"
-            else
-                echo -e "${RED}Could not find OpeniBank source.${NC}"
-                exit 1
-            fi
-        }
-    fi
-
-    cd "${INSTALL_DIR}/src" 2>/dev/null || cd "${INSTALL_DIR}"
-
-    # Verify maple is in the expected location (sibling ../maple)
-    if [ ! -d "../maple/crates" ]; then
-        echo -e "${RED}Error: maple framework not found at $(cd .. && pwd)/maple${NC}"
-        echo -e "${YELLOW}OpeniBank requires the maple framework as a sibling directory.${NC}"
-        echo -e "${YELLOW}Expected layout:${NC}"
-        echo "  parent_dir/"
-        echo "    ├── maple/        # Maple AI Framework"
-        echo "    └── openibank/    # OpeniBank (this project)"
-        echo ""
-        echo -e "${YELLOW}Clone maple manually and re-run:${NC}"
-        echo "  git clone <maple-repo-url> $(cd .. && pwd)/maple"
-        exit 1
-    fi
-    echo -e "${GREEN}✓ maple framework found${NC}"
-
-    # Build
-    echo -e "${BLUE}Building OpeniBank CLI...${NC}"
-    cargo build --release -p openibank-cli
-
-    # Copy binaries
-    cp target/release/openibank "${BIN_DIR}/" 2>/dev/null || true
-
-    # Build the unified server
-    echo -e "${BLUE}Building OpeniBank Server (unified binary)...${NC}"
-    cargo build --release -p openibank-server 2>/dev/null || true
-    cp target/release/openibank-server "${BIN_DIR}/" 2>/dev/null || true
-
-    # Build additional services
-    echo -e "${BLUE}Building additional services...${NC}"
-    cargo build --release -p openibank-playground 2>/dev/null || true
-    cargo build --release -p openibank-mcp 2>/dev/null || true
-
-    # Copy service binaries
-    for bin in openibank-playground openibank-mcp openibank-issuer-resonator; do
-        cp "target/release/${bin}" "${BIN_DIR}/" 2>/dev/null || true
-    done
-
-else
-    echo -e "${YELLOW}⚠ Rust not found. Please install Rust first:${NC}"
-    echo "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+  if [[ ! -d "${maple_dir}" ]]; then
+    echo "Maple repo not found: ${maple_dir}" >&2
+    echo "Expected sibling layout:"
+    echo "  $(cd "${REPO_ROOT}/.." && pwd)/openibank"
+    echo "  $(cd "${REPO_ROOT}/.." && pwd)/maple"
     exit 1
-fi
+  fi
 
-echo ""
-echo -e "${GREEN}✓ OpeniBank CLI installed to ${BIN_DIR}/openibank${NC}"
+  maple_rev="unknown"
+  if command -v git >/dev/null 2>&1; then
+    maple_rev="$(git -C "${maple_dir}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  fi
 
-# Add to PATH
-SHELL_NAME=$(basename "$SHELL")
-PROFILE_FILE=""
+  cat <<EOF
+Dev mode detected.
+OpenIBank repo: ${REPO_ROOT}
+Maple repo:    ${maple_dir}
+Maple git rev: ${maple_rev}
 
-case "$SHELL_NAME" in
-    bash)
-        if [ -f "${HOME}/.bash_profile" ]; then
-            PROFILE_FILE="${HOME}/.bash_profile"
-        else
-            PROFILE_FILE="${HOME}/.bashrc"
-        fi
-        ;;
-    zsh)
-        PROFILE_FILE="${HOME}/.zshrc"
-        ;;
-esac
+Build/install with sibling path dependencies:
+  cd "${REPO_ROOT}"
+  cargo install --path crates/openibank-cli --force
 
-if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
-    if [ -n "$PROFILE_FILE" ]; then
-        echo "" >> "$PROFILE_FILE"
-        echo "# OpeniBank" >> "$PROFILE_FILE"
-        echo "export PATH=\"\$PATH:${BIN_DIR}\"" >> "$PROFILE_FILE"
-        echo -e "${GREEN}✓ Added to PATH in ${PROFILE_FILE}${NC}"
-    fi
-fi
+Run demo:
+  openibank demo --seed 42
+EOF
+}
 
-echo ""
-echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  ✓ Installation Complete!${NC}"
-echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
-echo ""
-echo -e "${CYAN}Quick Start:${NC}"
-echo ""
-echo "  # Start the AI Agent Banking Server"
-echo -e "  ${MAGENTA}openibank-server${NC}              # http://localhost:8080"
-echo ""
-echo "  # With Anthropic Claude LLM"
-echo -e "  ${MAGENTA}OPENIBANK_LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... openibank-server${NC}"
-echo ""
-echo "  # With local Ollama LLM"
-echo -e "  ${MAGENTA}OPENIBANK_LLM_PROVIDER=ollama openibank-server${NC}"
-echo ""
-echo "  # Run the demo"
-echo -e "  ${MAGENTA}openibank demo full${NC}"
-echo ""
-echo "  # Start the web playground"
-echo -e "  ${MAGENTA}openibank-playground${NC}          # http://localhost:8080"
-echo ""
-echo -e "${YELLOW}AI agents need banks too. This is how they'll pay each other.${NC}"
-echo -e "${CYAN}https://www.openibank.com${NC}"
-echo ""
+release_mode() {
+  local target artifact checksums_url artifact_url tmp_dir checksums_file artifact_file
+  local expected actual extracted_bin
+
+  target="$(detect_target)"
+  artifact="${BIN_NAME}-${VERSION}-${target}.tar.gz"
+  checksums_url="${RELEASE_BASE}/${VERSION}/checksums.txt"
+  artifact_url="${RELEASE_BASE}/${VERSION}/${artifact}"
+
+  tmp_dir="$(mktemp -d)"
+  checksums_file="${tmp_dir}/checksums.txt"
+  artifact_file="${tmp_dir}/${artifact}"
+
+  trap 'rm -rf "${tmp_dir}"' EXIT
+
+  echo "Downloading checksums: ${checksums_url}"
+  curl -fsSL "${checksums_url}" -o "${checksums_file}"
+
+  echo "Downloading artifact: ${artifact_url}"
+  curl -fsSL "${artifact_url}" -o "${artifact_file}"
+
+  expected="$(awk -v file="${artifact}" '$2==file {print $1}' "${checksums_file}" | head -n1)"
+  if [[ -z "${expected}" ]]; then
+    echo "checksum entry not found for ${artifact}" >&2
+    exit 1
+  fi
+
+  actual="$(sha256_file "${artifact_file}")"
+  if [[ "${expected}" != "${actual}" ]]; then
+    echo "checksum mismatch for ${artifact}" >&2
+    echo "expected: ${expected}" >&2
+    echo "actual:   ${actual}" >&2
+    exit 1
+  fi
+  echo "SHA-256 verified."
+
+  tar -xzf "${artifact_file}" -C "${tmp_dir}"
+
+  extracted_bin="$(find "${tmp_dir}" -type f -name "${BIN_NAME}" -perm -u+x | head -n1 || true)"
+  if [[ -z "${extracted_bin}" ]]; then
+    echo "binary ${BIN_NAME} not found inside artifact" >&2
+    exit 1
+  fi
+
+  mkdir -p "${INSTALL_DIR}"
+  install -m 0755 "${extracted_bin}" "${INSTALL_DIR}/${BIN_NAME}"
+
+  echo "Installed: ${INSTALL_DIR}/${BIN_NAME}"
+  if [[ ":${PATH}:" != *":${INSTALL_DIR}:"* ]]; then
+    echo "Add to PATH if needed:"
+    echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+  fi
+}
+
+main() {
+  case "${1:-}" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --dev)
+      dev_mode
+      exit 0
+      ;;
+    "")
+      release_mode
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
+

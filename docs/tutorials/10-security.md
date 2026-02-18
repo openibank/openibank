@@ -22,32 +22,32 @@ Security is paramount in financial systems. OpeniBank implements multiple layers
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Security Architecture                       │
+│                      Security Architecture                      │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Layer 5: Cryptographic Commitment ─────────────────────────┐   │
-│    • Ed25519 signing                                         │   │
-│    • Receipt generation                                      │   │
-│    • Immutable audit log                                     │   │
-│                                                              │   │
-│  Layer 4: Policy Constraints ────────────────────────────────┤   │
-│    • Counterparty validation                                 │   │
-│    • Purpose matching                                        │   │
-│    • Time window enforcement                                 │   │
-│                                                              │   │
-│  Layer 3: Budget Enforcement ────────────────────────────────┤   │
-│    • Remaining allocation check                              │   │
-│    • Spending velocity limits                                │   │
-│                                                              │   │
-│  Layer 2: Permit Validation ─────────────────────────────────┤   │
-│    • Ed25519 signature verification                          │   │
-│    • Expiration checking                                     │   │
-│    • Amount bounds validation                                │   │
-│                                                              │   │
-│  Layer 1: LLM Output Validation ─────────────────────────────┘   │
-│    • JSON schema validation                                      │
-│    • Intent structure checking                                   │
-│                                                                  │
+│                                                                 │
+│  Layer 5: Cryptographic Commitment ──────────────────────────┐  │
+│    • Ed25519 signing                                         │  │
+│    • Receipt generation                                      │  │
+│    • Immutable audit log                                     │  │
+│                                                              │  │
+│  Layer 4: Policy Constraints ────────────────────────────────┤  │
+│    • Counterparty validation                                 │  │
+│    • Purpose matching                                        │  │
+│    • Time window enforcement                                 │  │
+│                                                              │  │
+│  Layer 3: Budget Enforcement ────────────────────────────────┤  │
+│    • Remaining allocation check                              │  │
+│    • Spending velocity limits                                │  │
+│                                                              │  │
+│  Layer 2: Permit Validation ─────────────────────────────────┤  │
+│    • Ed25519 signature verification                          │  │
+│    • Expiration checking                                     │  │
+│    • Amount bounds validation                                │  │
+│                                                              │  │
+│  Layer 1: LLM Output Validation ─────────────────────────────┘  │
+│    • JSON schema validation                                     │
+│    • Intent structure checking                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

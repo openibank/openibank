@@ -34,6 +34,9 @@ members = [
     "crates/openibank-agents",
     "crates/openibank-guard",
     "crates/openibank-receipts",
+    "crates/openibank-domain",
+    "crates/openibank-demo",
+    "crates/openibank-tui",
 
     # Integration layer
     "crates/openibank-maple",
@@ -121,6 +124,8 @@ reqwest = { version = "0.11", features = ["json", "stream"] }
 
 # CLI
 clap = { version = "4.4", features = ["derive"] }
+ratatui = "0.28"
+crossterm = "0.28"
 
 # Logging & tracing
 tracing = "0.1"
@@ -142,15 +147,15 @@ dotenvy = "0.15"
 # Maple AI Framework (Resonance Architecture)
 maple-runtime = { path = "../maple/crates/maple-runtime" }
 resonator-types = { path = "../maple/crates/resonator/types" }
-rcf-types = { path = "../maple/crates/rcf-types" }
-rcf-commitment = { path = "../maple/crates/rcf-commitment" }
-aas-types = { path = "../maple/crates/aas-types" }
-aas-policy = { path = "../maple/crates/aas-policy" }
-aas-service = { path = "../maple/crates/aas-service" }
-aas-identity = { path = "../maple/crates/aas-identity" }
-aas-capability = { path = "../maple/crates/aas-capability" }
-aas-adjudication = { path = "../maple/crates/aas-adjudication" }
-aas-ledger = { path = "../maple/crates/aas-ledger" }
+rcf-types = { path = "../maple/crates/rcf/types" }
+rcf-commitment = { path = "../maple/crates/rcf/commitment" }
+aas-types = { path = "../maple/crates/aas/types" }
+aas-policy = { path = "../maple/crates/aas/policy" }
+aas-service = { path = "../maple/crates/aas/service" }
+aas-identity = { path = "../maple/crates/aas/identity" }
+aas-capability = { path = "../maple/crates/aas/capability" }
+aas-adjudication = { path = "../maple/crates/aas/adjudication" }
+aas-ledger = { path = "../maple/crates/aas/ledger" }
 
 # PALM Fleet Orchestration (Maple)
 palm-types = { path = "../maple/crates/palm/types" }
@@ -159,9 +164,9 @@ palm-deployment = { path = "../maple/crates/palm/deployment" }
 palm-health = { path = "../maple/crates/palm/health" }
 
 # UAL Universal Agent Language (Maple)
-ual-types = { path = "../maple/crates/ual-types" }
-ual-parser = { path = "../maple/crates/ual-parser" }
-ual-compiler = { path = "../maple/crates/ual-compiler" }
+ual-types = { path = "../maple/crates/ual/types" }
+ual-parser = { path = "../maple/crates/ual/parser" }
+ual-compiler = { path = "../maple/crates/ual/compiler" }
 
 # Workspace crates - Foundation
 openibank-types = { path = "crates/openibank-types" }
@@ -196,6 +201,9 @@ openibank-agent-kernel = { path = "crates/openibank-agent-kernel" }
 openibank-agents = { path = "crates/openibank-agents" }
 openibank-guard = { path = "crates/openibank-guard" }
 openibank-receipts = { path = "crates/openibank-receipts" }
+openibank-domain = { path = "crates/openibank-domain" }
+openibank-demo = { path = "crates/openibank-demo" }
+openibank-tui = { path = "crates/openibank-tui" }
 
 # Workspace crates - Integration
 openibank-maple = { path = "crates/openibank-maple" }

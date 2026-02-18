@@ -11,20 +11,13 @@ name = "openibank"
 path = "src/main.rs"
 
 [dependencies]
-openibank-core = { workspace = true }
-openibank-ledger = { workspace = true }
-openibank-issuer = { workspace = true }
-openibank-llm = { workspace = true }
-openibank-agents = { workspace = true }
-openibank-guard = { workspace = true }
-openibank-receipts = { workspace = true }
+openibank-domain = { workspace = true }
+openibank-demo = { workspace = true }
+openibank-maple = { workspace = true }
+openibank-tui = { workspace = true }
 
 # CLI
 clap = { workspace = true }
-dialoguer = "0.11"
-indicatif = "0.17"
-console = "0.15"
-colored = "2.1"
 
 # Async
 tokio = { workspace = true }
@@ -34,15 +27,5 @@ async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-# HTTP client for issuer service
-reqwest = { workspace = true }
-
-# Time
-chrono = { workspace = true }
-
-# Misc
-uuid = { workspace = true }
-thiserror = { workspace = true }
 anyhow = { workspace = true }
-dotenvy = { workspace = true }
-dirs = "5.0"
+thiserror = { workspace = true }

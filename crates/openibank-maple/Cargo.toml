@@ -28,6 +28,12 @@ openibank-agents = { workspace = true }
 openibank-llm = { workspace = true }
 openibank-guard = { workspace = true }
 openibank-agent-kernel = { workspace = true }
+openibank-domain = { workspace = true }
+
+# Maple WorldLine crates (canonical namespace)
+worldline-core = { path = "../../../maple/crates/worldline/core" }
+worldline-runtime = { path = "../../../maple/crates/worldline/runtime" }
+worldline-ledger = { path = "../../../maple/crates/worldline/ledger" }
 
 # Shared deps
 serde = { workspace = true }
@@ -38,6 +44,9 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

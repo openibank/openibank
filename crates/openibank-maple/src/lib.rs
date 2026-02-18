@@ -40,38 +40,41 @@
 //! - **TradeCommitmentManager**: RcfCommitment lifecycle for every trade
 //! - **ActivityLog**: Tracks all agent activity for dashboard display
 
+pub mod accountability;
+pub mod attention;
 pub mod bridge;
+pub mod commitments;
+pub mod couplings;
 pub mod resonator_agent;
 pub mod runtime;
-pub mod accountability;
-pub mod couplings;
-pub mod attention;
-pub mod commitments;
+pub mod worldline;
 
 // Re-exports for convenience
+pub use accountability::{AccountabilityInfo, IBankAccountability};
+pub use attention::{AttentionBudgetInfo, AttentionManager, AttentionSummary};
 pub use bridge::{
-    MapleIdBridge, ResonatorAgentRole, AgentPresenceState,
-    build_resonator_profile, new_maple_resonator_id, openibank_id_from_name,
+    build_resonator_profile, new_maple_resonator_id, openibank_id_from_name, AgentPresenceState,
+    MapleIdBridge, ResonatorAgentRole,
 };
-pub use resonator_agent::{MapleResonatorAgent, AgentActivity, ActivityEntry};
+pub use commitments::{CommitmentsSummary, TradeCommitmentManager, TradeCommitmentRecord};
+pub use couplings::{CouplingsSummary, TradeCouplingInfo, TradeCouplingManager};
+pub use resonator_agent::{ActivityEntry, AgentActivity, MapleResonatorAgent};
 pub use runtime::{IBankRuntime, IBankRuntimeConfig};
-pub use accountability::{IBankAccountability, AccountabilityInfo};
-pub use couplings::{TradeCouplingManager, TradeCouplingInfo, CouplingsSummary};
-pub use attention::{AttentionManager, AttentionBudgetInfo, AttentionSummary};
-pub use commitments::{TradeCommitmentManager, TradeCommitmentRecord, CommitmentsSummary};
+pub use worldline::{
+    ActionKind, AgentSnapshot, CommitmentGatePort, MapleAdapterError, MapleWorldlineRuntime,
+    RunMetadata, WorldLineReader, WorldLineWriter, WorldlineEventRecord,
+};
 
 // Re-export Maple types that consumers will need
 pub use maple_runtime::{
-    MapleRuntime, ResonatorHandle, CouplingHandle,
-    ResonatorSpec, ResonatorProfile, PresenceState,
-    Coupling, CouplingParams, CouplingScope, CouplingPersistence,
-    AttentionBudget, AttentionBudgetSpec,
-    config::ibank_runtime_config,
+    config::ibank_runtime_config, AttentionBudget, AttentionBudgetSpec, Coupling, CouplingHandle,
+    CouplingParams, CouplingPersistence, CouplingScope, MapleRuntime, PresenceState,
+    ResonatorHandle, ResonatorProfile, ResonatorSpec,
 };
 
 // Re-export AAS types for consumers
-pub use aas_types::{AgentId, PolicyDecisionCard, CommitmentOutcome};
 pub use aas_service::AasError;
+pub use aas_types::{AgentId, CommitmentOutcome, PolicyDecisionCard};
 pub use rcf_commitment::CommitmentId;
 pub use rcf_types::IdentityRef;
 
@@ -94,7 +97,11 @@ mod tests {
     #[tokio::test]
     async fn test_ibank_runtime_bootstrap() {
         let runtime = IBankRuntime::new(IBankRuntimeConfig::default()).await;
-        assert!(runtime.is_ok(), "IBankRuntime bootstrap failed: {:?}", runtime.err());
+        assert!(
+            runtime.is_ok(),
+            "IBankRuntime bootstrap failed: {:?}",
+            runtime.err()
+        );
         runtime.unwrap().shutdown().await.expect("shutdown failed");
     }
 }
