@@ -7,6 +7,7 @@ description = "Programmable wallets with compartments, budgets, and delegation"
 
 [dependencies]
 openibank-types = { workspace = true }
+openibank-domain = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
@@ -15,6 +16,16 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
+# Crypto primitives for EVM vault
+k256 = { workspace = true }
+ed25519-dalek = { workspace = true }
+sha3 = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }
+# QR code for WalletConnect URI
+qrcode = "0.14"
+# Random number generation
+rand = "0.8"
 
 [dev-dependencies]
 tokio = { workspace = true }

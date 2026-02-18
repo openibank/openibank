@@ -2,8 +2,11 @@
 
 **The Open AI Agent Banking Server**
 
+[![CI](https://github.com/openibank/openibank/actions/workflows/ci.yml/badge.svg)](https://github.com/openibank/openibank/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/openibank/openibank/actions/workflows/security.yml/badge.svg)](https://github.com/openibank/openibank/actions/workflows/security.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/github-openibank/openibank-blue.svg)](https://github.com/openibank/openibank)
+[![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/openibank/openibank/releases)
 
 OpeniBank is a **complete AI-agent banking infrastructure** you can run on your own server, Mac Mini, or Linux box. Powered by the [Maple AI Framework](https://github.com/mapleaiorg/maple) and its Resonance Architecture, it provides everything AI agents need to safely transact: wallets, escrow, stablecoin issuance, fleet orchestration, and verifiable cryptographic receipts.
 
@@ -185,6 +188,33 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 }
 ```
 
+## Arena Mode
+
+Watch four AI trading bots compete live with a scoring system and a champion SVG receipt:
+
+```bash
+# Run a 20-round arena (deterministic, no RNG required)
+openibank arena run --rounds 20
+
+# JSON output
+openibank arena run --rounds 50 --json
+
+# Export champion SVG receipt
+openibank arena run --rounds 20 --champion-svg champion.svg
+```
+
+**Bots:**
+| Bot | PnL/round | Speed | Risk | Style |
+|-----|-----------|-------|------|-------|
+| Aggressive | $0.12 | 90 | 85 | High variance, big wins and losses |
+| Conservative | $0.045 | 40 | 20 | Steady, low drawdown |
+| Arbitrageur | $0.08 | 75 | 55 | Spread capture, volatility-sensitive |
+| MarketMaker | $0.06 | 60 | 35 | Earns bid-ask spread, very stable |
+
+**Scoring:** `composite = pnl×0.5 + speed×0.3 + (100−risk)×0.2`
+
+The champion receives a verifiable cryptographic receipt with a leaderboard SVG card.
+
 ## UAL Commands
 
 The Universal Agent Language (UAL) provides SQL-like commands for banking:
@@ -231,28 +261,37 @@ curl -X POST http://localhost:8080/api/ual \
 ```
 openibank/
 ├── crates/
+│   ├── openibank-domain/     # Pure domain types: IusdAmount, Receipt, Arena, SVG cards
 │   ├── openibank-core/       # Wallet, permits, commitments, escrow
 │   ├── openibank-ledger/     # Double-entry immutable accounting
-│   ├── openibank-issuer/     # IUSD stablecoin with reserve management
+│   ├── openibank-issuer/     # IUSD stablecoin with WorldLine event emission
+│   ├── openibank-wallet/     # EVM vault, WalletConnect QR, Ed25519 identity
+│   ├── openibank-clearing/   # Multilateral netting engine (property-tested)
+│   ├── openibank-settlement/ # Atomic batch settlement executor
+│   ├── openibank-maple/      # Maple bridge (Resonators, AAS, Couplings)
+│   ├── openibank-tui/        # Bloomberg-dark ratatui playground
 │   ├── openibank-llm/        # Multi-provider LLM abstraction
 │   ├── openibank-agents/     # Buyer, Seller, Arbiter agent implementations
 │   ├── openibank-guard/      # LLM output validation and safety
 │   ├── openibank-receipts/   # Ed25519 cryptographic receipt toolkit
-│   ├── openibank-maple/      # Maple bridge (Resonators, AAS, Couplings)
 │   ├── openibank-palm/       # PALM fleet orchestration integration
 │   ├── openibank-ual/        # UAL banking command parser/compiler
 │   ├── openibank-state/      # Shared system state and SSE events
-│   └── openibank-cli/        # Command-line interface
+│   └── openibank-cli/        # clap v4 CLI: demo, receipt, wallet, worldline, arena
 ├── services/
-│   ├── openibank-server/     # Unified all-in-one server
+│   ├── openibank-server/     # Unified server with REST + WebSocket events
 │   ├── openibank-playground/ # Interactive web playground
 │   ├── openibank-mcp/        # Claude Desktop MCP integration
 │   └── openibank-issuer-resonator/ # Standalone IUSD issuer
+├── .github/workflows/
+│   ├── ci.yml                # Lint + test + cross-platform build + release
+│   └── security.yml          # Weekly cargo-audit
+├── justfile                  # Task runner (build, test, demo, release, docker)
 ├── Dockerfile                # Multi-stage Docker build
 ├── docker-compose.yml        # Docker Compose with optional Ollama
 └── scripts/
     ├── demo.sh               # Headless deterministic demo runner
-    └── install.sh            # One-line installer
+    └── install.sh            # One-line installer with SHA-256 verification
 ```
 
 ### System Architecture
@@ -342,6 +381,24 @@ These are non-negotiable, enforced by the Maple runtime:
 | Branch network | PALM fleet orchestration |
 | SQL queries | UAL (Universal Agent Language) |
 | Trust in institutions | Trust in 8 architectural invariants |
+
+## Development
+
+[`just`](https://github.com/casey/just) is the recommended task runner (`cargo install just`).
+
+```bash
+just             # list all recipes
+just build       # debug build
+just build-release  # optimized release binary
+just test        # run full test suite (all features)
+just ci          # fmt-check + lint + test (mirrors CI)
+just demo        # interactive TUI demo
+just server      # start management server on :8080
+just arena 20    # 4-bot arena competition (20 rounds)
+just verify path/to/receipt.json  # verify receipt
+just install     # cargo install to ~/.local/bin
+just release     # build release archive + SHA-256 checksums
+```
 
 ## Contributing
 

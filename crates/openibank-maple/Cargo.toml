@@ -47,6 +47,16 @@ tracing = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 ed25519-dalek = { workspace = true }
+futures = { workspace = true }
+
+# LocalSim backend deps
+blake3 = { workspace = true }
+k256 = { workspace = true }
+sha3 = { workspace = true }
+dashmap = { workspace = true }
+ulid = { workspace = true }
+async-stream = { workspace = true }
+dirs-next = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

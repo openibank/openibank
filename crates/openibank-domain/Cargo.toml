@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "OpenIBank domain primitives: permits, commitments, receipts, and card rendering"
+description = "OpeniBank domain primitives: IusdAmount, SpendPermit, Receipt, cards, escrow, intents — zero Maple dependency"
 
 [dependencies]
 serde = { workspace = true }
@@ -14,5 +14,10 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 ed25519-dalek = { workspace = true }
 sha2 = { workspace = true }
+blake3 = { workspace = true }
 hex = { workspace = true }
+ulid = { workspace = true }
+qrcode = "0.14"
 
+[dev-dependencies]
+proptest = "1.4"

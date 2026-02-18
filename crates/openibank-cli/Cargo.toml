@@ -15,6 +15,7 @@ openibank-domain = { workspace = true }
 openibank-demo = { workspace = true }
 openibank-maple = { workspace = true }
 openibank-tui = { workspace = true }
+openibank-wallet = { workspace = true }
 
 # CLI
 clap = { workspace = true }

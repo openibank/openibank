@@ -14,3 +14,8 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
+blake3 = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+proptest = "1.4"

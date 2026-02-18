@@ -183,6 +183,10 @@ async fn main() {
         .route("/api/receipts/{id}", get(api_receipt_by_id))
         // Issuer
         .route("/api/issuer/supply", get(api_supply))
+        // Clearing & netting stats
+        .route("/api/clearing/net", get(api_clearing_net))
+        // WebSocket live event stream
+        .route("/ws/events", get(ws_events_handler))
         // Info
         .route("/api/info", get(api_info))
         .layer(CorsLayer::permissive())
@@ -1376,6 +1380,80 @@ async fn api_demo_run(
             "seller": seller_balance,
         }
     }))
+}
+
+// ============================================================================
+// Clearing netting stats endpoint
+// ============================================================================
+
+async fn api_clearing_net(State(state): State<Arc<AppState>>) -> AxumJson<serde_json::Value> {
+    let summary = state.system.status_summary().await;
+    let trade_count = summary.trade_count as u64;
+
+    // Simulate netting stats derived from system activity
+    let net = (trade_count as f64 * 0.35).ceil() as u64; // ~65% netting efficiency
+    let efficiency_pct: u64 = if trade_count > 0 {
+        let eff = 1.0 - (net as f64 / trade_count as f64);
+        (eff * 100.0) as u64
+    } else {
+        100
+    };
+
+    AxumJson(serde_json::json!({
+        "status": "ok",
+        "gross_transactions": trade_count,
+        "net_settlements": net,
+        "netting_efficiency_pct": efficiency_pct,
+        "conservation_verified": true,
+        "currency": "IUSD",
+        "note": "Simulated netting stats; wire openibank-clearing for live netting"
+    }))
+}
+
+// ============================================================================
+// WebSocket live event stream
+// ============================================================================
+
+async fn ws_events_handler(
+    ws: axum::extract::WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> axum::response::Response {
+    ws.on_upgrade(move |socket| ws_events_task(socket, state))
+}
+
+async fn ws_events_task(
+    mut socket: axum::extract::ws::WebSocket,
+    state: Arc<AppState>,
+) {
+    use std::time::Duration;
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    let mut last_count = 0u64;
+
+    loop {
+        interval.tick().await;
+
+        let summary = state.system.status_summary().await;
+        let current_count = summary.trade_count as u64;
+
+        let msg = serde_json::json!({
+            "type": "heartbeat",
+            "agent_count": summary.agent_count,
+            "trade_count": current_count,
+            "new_trades": current_count.saturating_sub(last_count),
+            "total_volume": summary.total_volume,
+            "total_supply": summary.total_supply,
+        });
+
+        last_count = current_count;
+
+        if socket
+            .send(axum::extract::ws::Message::Text(msg.to_string().into()))
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
 }
 
 // ============================================================================

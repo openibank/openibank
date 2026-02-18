@@ -1,8 +1,28 @@
-//! OpeniBank-Maple Bridge - Integrating Maple AI Framework with OpeniBank
+//! OpeniBank-Maple Bridge — Isolation layer between OpeniBank and the Maple AI Framework.
 //!
-//! This crate bridges OpeniBank's banking primitives with the Maple AI Framework's
-//! Resonance Architecture. Every OpeniBank agent becomes a Maple Resonator with
-//! the IBank runtime profile.
+//! This crate has two roles:
+//!
+//! 1. **Stable adapter traits** ([`traits`]) — the ONLY surface through which all other
+//!    OpeniBank crates access Maple. Shielded from Maple API changes.
+//!
+//! 2. **Maple integration** — wraps Maple's WorldLine, CommitmentGate, and Resonator
+//!    identity behind those stable traits.
+//!
+//! # Backend Selection
+//!
+//! ```text
+//! OPENIBANK_MODE=local-sim    → LocalSimBackend (embedded WAL, zero external deps)
+//! OPENIBANK_MODE=maple-native → MapleNativeBackend (full WorldLine + CommitmentGate)
+//! (unset / auto)             → LocalSim (MapleNative via IBankRuntime separately)
+//! ```
+//!
+//! # The Three Invariant Pillars
+//!
+//! ```text
+//! WorldLineBackend    — append-only hash-chained event ledger
+//! CommitmentBackend   — Intent → Commitment → Consequence (no bypass)
+//! ResonatorIdentity   — EVM + ed25519 identity (vault never exports keys)
+//! ```
 //!
 //! # Architecture
 //!
@@ -15,11 +35,7 @@
 //! │    │    ├─ AgentBrain (LLM reasoning)                      │
 //! │    │    └─ CognitiveContext (meaning → intent)             │
 //! │    ├─ Resonator: SellerAgent                               │
-//! │    │    ├─ Wallet + Services + Invoices                    │
-//! │    │    └─ CognitiveContext                                │
 //! │    ├─ Resonator: ArbiterAgent                              │
-//! │    │    ├─ DisputeCases + Decisions                        │
-//! │    │    └─ CognitiveContext                                │
 //! │    └─ Couplings (buyer ↔ seller, escrow ↔ arbiter)        │
 //! │                                                             │
 //! │  8 Invariants enforced:                                     │
@@ -28,18 +44,13 @@
 //! │    Commitment → Consequence                                │
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
-//!
-//! # Key Concepts
-//!
-//! - **MapleResonatorAgent**: Wraps an OpeniBank agent as a Maple Resonator
-//! - **IBankRuntime**: Bootstraps MapleRuntime with `ibank_runtime_config()`
-//! - **MapleIdBridge**: ID mapping between OpeniBank ↔ Maple type systems
-//! - **IBankAccountability**: AAS integration for identity, capabilities, commitments
-//! - **TradeCouplingManager**: Buyer↔seller coupling lifecycle
-//! - **AttentionManager**: Attention budget monitoring and trade gating
-//! - **TradeCommitmentManager**: RcfCommitment lifecycle for every trade
-//! - **ActivityLog**: Tracks all agent activity for dashboard display
 
+// ── Stable abstraction layer (P1 spec) ───────────────────────────────────────
+pub mod traits;
+pub mod local_sim;
+pub mod factory;
+
+// ── Maple integration modules ─────────────────────────────────────────────────
 pub mod accountability;
 pub mod attention;
 pub mod bridge;
@@ -49,7 +60,16 @@ pub mod resonator_agent;
 pub mod runtime;
 pub mod worldline;
 
-// Re-exports for convenience
+// ── Stable trait re-exports (primary API for other OpeniBank crates) ─────────
+pub use traits::{
+    CommitmentBackend, CommitmentError, CommitmentHandle, CommitmentId, ConsequenceProof,
+    IdentityError, ResonatorId, ResonatorIdentity, WllError, WllEvent, WllEventId, WllEventType,
+    WorldLineBackend,
+};
+pub use local_sim::{LocalSimCommitment, LocalSimIdentity, LocalSimWorldLine};
+pub use factory::{AdapterMode, BackendStack, MapleAdapterConfig, create_backends, create_identity, create_demo_identities};
+
+// ── Maple integration re-exports ──────────────────────────────────────────────
 pub use accountability::{AccountabilityInfo, IBankAccountability};
 pub use attention::{AttentionBudgetInfo, AttentionManager, AttentionSummary};
 pub use bridge::{
@@ -75,7 +95,8 @@ pub use maple_runtime::{
 // Re-export AAS types for consumers
 pub use aas_service::AasError;
 pub use aas_types::{AgentId, CommitmentOutcome, PolicyDecisionCard};
-pub use rcf_commitment::CommitmentId;
+// Note: rcf_commitment::CommitmentId is available as rcf_commitment::CommitmentId
+// (not re-exported here to avoid conflict with traits::CommitmentId, our stable abstraction).
 pub use rcf_types::IdentityRef;
 
 #[cfg(test)]

@@ -540,10 +540,12 @@ impl WorldLineWriter for MapleWorldlineRuntime {
             .record_outcome(&commitment_id, CommitmentOutcome::Fulfilled)
             .await?;
 
-        let permit = SpendPermit::new(
+        let iusd_amount = openibank_domain::IusdAmount::from_micros(amount.unsigned_abs() as u128);
+        let permit = SpendPermit::new_daily(
             openibank_domain::AgentId::new(from),
             openibank_domain::AgentId::new(to),
-            amount,
+            iusd_amount,
+            "maple worldline transfer",
         );
 
         let receipt = Receipt::new_unsigned(

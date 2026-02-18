@@ -12,11 +12,13 @@ pub mod compartment;
 pub mod wallet;
 pub mod budget;
 pub mod delegation;
+pub mod vault;
 
 pub use compartment::*;
 pub use wallet::*;
 pub use budget::*;
 pub use delegation::*;
+pub use vault::{Vault, VaultError, EvmAddress, OnChainBalance, simulate_onchain_balances};
 
 /// Purpose of a wallet compartment
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

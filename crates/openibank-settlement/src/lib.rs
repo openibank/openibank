@@ -381,3 +381,127 @@ impl Default for SettlementExecutor {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openibank_types::{Amount, Currency, InstitutionId, SettlementChannel, SettlementLeg, SettlementLegStatus};
+
+    fn iusd(v: i128) -> Amount { Amount::new(v, Currency::iusd(), 18) }
+
+    fn make_leg(from: InstitutionId, to: InstitutionId, amount: Amount) -> SettlementLeg {
+        SettlementLeg {
+            id: uuid::Uuid::new_v4(),
+            from,
+            to,
+            amount,
+            status: SettlementLegStatus::Pending,
+            channel: SettlementChannel::Internal,
+            receipt_id: None,
+            executed_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn single_leg_executes_successfully() {
+        let executor = SettlementExecutor::new();
+        let channel = InMemoryChannel::new();
+        let inst_a = InstitutionId::new();
+        let inst_b = InstitutionId::new();
+
+        channel.set_balance(inst_a.clone(), iusd(1_000_000)).await;
+        executor.register_channel(
+            SettlementChannel::Internal,
+            std::sync::Arc::new(channel),
+        ).await;
+
+        let legs = vec![make_leg(inst_a, inst_b, iusd(500_000))];
+        let result = executor.execute_batch_atomic(legs, Currency::iusd()).await.unwrap();
+        assert!(result.success);
+        assert_eq!(result.executed_legs, 1);
+        assert_eq!(result.failed_legs, 0);
+    }
+
+    #[tokio::test]
+    async fn insufficient_funds_fails_atomically() {
+        let executor = SettlementExecutor::new();
+        let channel = InMemoryChannel::new();
+        let inst_a = InstitutionId::new();
+        let inst_b = InstitutionId::new();
+
+        // Only 100 but trying to settle 1000
+        channel.set_balance(inst_a.clone(), iusd(100)).await;
+        executor.register_channel(
+            SettlementChannel::Internal,
+            std::sync::Arc::new(channel),
+        ).await;
+
+        let legs = vec![make_leg(inst_a, inst_b, iusd(1_000))];
+        let result = executor.execute_batch_atomic(legs, Currency::iusd()).await.unwrap();
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn multi_leg_batch_executes_in_order() {
+        let executor = SettlementExecutor::new();
+        let channel = InMemoryChannel::new();
+        let a = InstitutionId::new();
+        let b = InstitutionId::new();
+        let c = InstitutionId::new();
+
+        channel.set_balance(a.clone(), iusd(1_000)).await;
+        channel.set_balance(b.clone(), iusd(500)).await;
+        executor.register_channel(
+            SettlementChannel::Internal,
+            std::sync::Arc::new(channel),
+        ).await;
+
+        let legs = vec![
+            make_leg(a.clone(), b.clone(), iusd(300)),
+            make_leg(b.clone(), c.clone(), iusd(200)),
+        ];
+        let result = executor.execute_batch_atomic(legs, Currency::iusd()).await.unwrap();
+        assert!(result.success);
+        assert_eq!(result.executed_legs, 2);
+    }
+
+    #[tokio::test]
+    async fn batch_state_lifecycle() {
+        let executor = SettlementExecutor::new();
+        let channel = InMemoryChannel::new();
+        let a = InstitutionId::new();
+        let b = InstitutionId::new();
+        channel.set_balance(a.clone(), iusd(1_000)).await;
+        executor.register_channel(
+            SettlementChannel::Internal,
+            std::sync::Arc::new(channel),
+        ).await;
+
+        let legs = vec![make_leg(a, b, iusd(100))];
+        let batch_id = executor.create_batch(legs, Currency::iusd()).await.unwrap();
+
+        let batch = executor.get_batch(&batch_id).await.unwrap();
+        assert_eq!(batch.state, SettlementBatchState::Created);
+
+        executor.prepare(&batch_id).await.unwrap();
+        let batch = executor.get_batch(&batch_id).await.unwrap();
+        assert_eq!(batch.state, SettlementBatchState::Prepared);
+
+        let result = executor.execute(&batch_id).await.unwrap();
+        assert!(result.success);
+        let batch = executor.get_batch(&batch_id).await.unwrap();
+        assert_eq!(batch.state, SettlementBatchState::Executed);
+
+        executor.confirm_finality(&batch_id).await.unwrap();
+        let batch = executor.get_batch(&batch_id).await.unwrap();
+        assert_eq!(batch.state, SettlementBatchState::Finalized);
+    }
+
+    #[tokio::test]
+    async fn empty_batch_is_rejected() {
+        let executor = SettlementExecutor::new();
+        let result = executor.create_batch(vec![], Currency::iusd()).await;
+        assert!(result.is_err());
+    }
+}

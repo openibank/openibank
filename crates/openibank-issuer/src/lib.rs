@@ -721,3 +721,173 @@ mod tests {
         assert_eq!(attestation.reserve_amount, Amount::new(1_000_000_00));
     }
 }
+
+// ── WorldLine Event Emission ───────────────────────────────────────────────────
+
+/// A WorldLine event record emitted by the issuer for every mint/burn.
+///
+/// In the full Maple integration these would be written to `WorldLineBackend`.
+/// In local-sim mode they accumulate in the in-memory log below.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssuerWllEvent {
+    /// Monotonic sequence number within this issuer
+    pub seq: u64,
+    /// Operation type
+    pub operation: IssuerOperation,
+    /// Target resonator
+    pub target: ResonatorId,
+    /// Amount minted/burned (in smallest units)
+    pub amount_units: u64,
+    /// Total supply after this operation
+    pub total_supply_after: u64,
+    /// blake3 hash of the IssuerReceipt JSON
+    pub receipt_hash: String,
+    /// Timestamp
+    pub emitted_at: DateTime<Utc>,
+}
+
+impl IssuerWllEvent {
+    fn from_receipt(receipt: &IssuerReceipt, seq: u64, total_supply_after: u64) -> Self {
+        let receipt_json = serde_json::to_string(receipt).unwrap_or_default();
+        let receipt_hash = format!(
+            "{:x}",
+            blake3::hash(receipt_json.as_bytes()).as_bytes().iter().fold(0u64, |a, &b| a.wrapping_mul(31).wrapping_add(b as u64))
+        );
+        IssuerWllEvent {
+            seq,
+            operation: receipt.operation.clone(),
+            target: receipt.target.clone(),
+            amount_units: receipt.amount.0,
+            total_supply_after,
+            receipt_hash,
+            emitted_at: Utc::now(),
+        }
+    }
+}
+
+/// Extension of `Issuer` that also emits WorldLine events on every mint/burn.
+///
+/// This wraps the core `Issuer` and maintains an append-only in-memory log
+/// of `IssuerWllEvent`. In production this would forward events to a
+/// `WorldLineBackend` (Maple or LocalSim).
+pub struct WorldLineIssuer {
+    inner: Issuer,
+    wll_log: Arc<RwLock<Vec<IssuerWllEvent>>>,
+}
+
+impl WorldLineIssuer {
+    pub fn new(config: IssuerConfig, reserve_cap: Amount, ledger: Arc<Ledger>) -> Self {
+        Self {
+            inner: Issuer::new(config, reserve_cap, ledger),
+            wll_log: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    /// Mint with WorldLine event emission.
+    pub async fn mint(&self, intent: MintIntent) -> Result<IssuerReceipt> {
+        let receipt = self.inner.mint(intent).await?;
+        let supply = self.inner.total_supply().await;
+        let seq = {
+            let log = self.wll_log.read().await;
+            log.len() as u64
+        };
+        let event = IssuerWllEvent::from_receipt(&receipt, seq, supply.0);
+        self.wll_log.write().await.push(event);
+        Ok(receipt)
+    }
+
+    /// Burn with WorldLine event emission.
+    pub async fn burn(&self, intent: BurnIntent) -> Result<IssuerReceipt> {
+        let receipt = self.inner.burn(intent).await?;
+        let supply = self.inner.total_supply().await;
+        let seq = {
+            let log = self.wll_log.read().await;
+            log.len() as u64
+        };
+        let event = IssuerWllEvent::from_receipt(&receipt, seq, supply.0);
+        self.wll_log.write().await.push(event);
+        Ok(receipt)
+    }
+
+    /// Return all WorldLine events in emission order.
+    pub async fn wll_events(&self) -> Vec<IssuerWllEvent> {
+        self.wll_log.read().await.clone()
+    }
+
+    /// Access the inner issuer (for halt/resume/policy/supply queries).
+    pub fn inner(&self) -> &Issuer {
+        &self.inner
+    }
+}
+
+#[cfg(test)]
+mod wll_tests {
+    use super::*;
+
+    fn make_issuer() -> WorldLineIssuer {
+        let ledger = Arc::new(Ledger::new());
+        WorldLineIssuer::new(
+            IssuerConfig::default(),
+            Amount::new(1_000_000_00),
+            ledger,
+        )
+    }
+
+    #[tokio::test]
+    async fn mint_emits_wll_event() {
+        let issuer = make_issuer();
+        let account = ResonatorId::new();
+        issuer.mint(MintIntent::new(account.clone(), Amount::new(1000), "test")).await.unwrap();
+        let events = issuer.wll_events().await;
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].seq, 0);
+        assert_eq!(events[0].total_supply_after, 1000);
+    }
+
+    #[tokio::test]
+    async fn burn_emits_wll_event() {
+        let issuer = make_issuer();
+        let account = ResonatorId::new();
+        issuer.mint(MintIntent::new(account.clone(), Amount::new(1000), "mint")).await.unwrap();
+        issuer.burn(BurnIntent::new(account, Amount::new(400), "burn")).await.unwrap();
+        let events = issuer.wll_events().await;
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1].total_supply_after, 600);
+    }
+
+    #[tokio::test]
+    async fn wll_events_are_sequential() {
+        let issuer = make_issuer();
+        let account = ResonatorId::new();
+        for i in 0..5u64 {
+            issuer.mint(MintIntent::new(account.clone(), Amount::new(100), "batch")).await.unwrap();
+            let events = issuer.wll_events().await;
+            assert_eq!(events.last().unwrap().seq, i);
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_mint_does_not_emit_event() {
+        let issuer = make_issuer();
+        // Mint zero should fail
+        let result = issuer.mint(MintIntent::new(ResonatorId::new(), Amount::new(0), "zero")).await;
+        assert!(result.is_err());
+        let events = issuer.wll_events().await;
+        assert_eq!(events.len(), 0, "Failed ops must not emit events");
+    }
+
+    #[tokio::test]
+    async fn wll_event_contains_receipt_hash() {
+        let issuer = make_issuer();
+        let receipt = issuer.mint(MintIntent::new(ResonatorId::new(), Amount::new(500), "hash test")).await.unwrap();
+        let events = issuer.wll_events().await;
+        assert!(!events[0].receipt_hash.is_empty());
+        // Hash should be deterministic across calls (receipt JSON is stable)
+        let receipt_json = serde_json::to_string(&receipt).unwrap();
+        let expected = format!(
+            "{:x}",
+            blake3::hash(receipt_json.as_bytes()).as_bytes().iter().fold(0u64, |a, &b| a.wrapping_mul(31).wrapping_add(b as u64))
+        );
+        assert_eq!(events[0].receipt_hash, expected);
+    }
+}

@@ -12,8 +12,17 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Gauge};
 use ratatui::{Frame, Terminal};
+
+// ── Bloomberg-dark palette ──────────────────────────────────────────────────
+const BLOOMBERG_CYAN: Color    = Color::Rgb(0, 212, 255);   // #00d4ff — headers/IDs
+const BLOOMBERG_GREEN: Color   = Color::Rgb(0, 230, 118);   // #00e676 — positive/verified
+const BLOOMBERG_AMBER: Color   = Color::Rgb(255, 171, 64);  // #ffab40 — warnings/pending
+const BLOOMBERG_DIM: Color     = Color::Rgb(74, 85, 104);   // #4a5568 — dimmed text
+const BLOOMBERG_TEXT: Color    = Color::Rgb(200, 208, 224); // #c8d0e0 — normal text
+const BLOOMBERG_BG: Color      = Color::Rgb(10, 14, 26);    // #0a0e1a — background
+const BLOOMBERG_HEADER_BG: Color = Color::Rgb(15, 23, 41); // #0f1729 — header bg
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -175,34 +184,41 @@ fn draw_ui(
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
-            Constraint::Min(10),
-            Constraint::Length(2),
+            Constraint::Length(3),   // header
+            Constraint::Min(10),     // body
+            Constraint::Length(3),   // footer
         ])
         .split(frame.area());
 
+    // ── Bloomberg-dark header bar ────────────────────────────────────────────
+    let status_color = if running { BLOOMBERG_GREEN } else { BLOOMBERG_AMBER };
+    let status_tag = if running { "● LIVE" } else { "○ PAUSED" };
     let header = Paragraph::new(Line::from(vec![
         Span::styled(
-            " OpenIBank v0.1.0 ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            " ◈ OpeniBank ",
+            Style::default().fg(BLOOMBERG_CYAN).bg(BLOOMBERG_HEADER_BG).add_modifier(Modifier::BOLD),
         ),
-        Span::raw(format!(
-            " Maple v{} | mode=local-sim | run_id={} | worldline={}",
-            maple_version, run_id, worldline_id
-        )),
+        Span::styled("v2.0", Style::default().fg(BLOOMBERG_DIM).bg(BLOOMBERG_HEADER_BG)),
+        Span::styled(
+            format!("  {}  ", status_tag),
+            Style::default().fg(status_color).bg(BLOOMBERG_HEADER_BG).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("│ Maple {} │ sim:{} │ wl:{}", maple_version, run_id, short_hash(worldline_id)),
+            Style::default().fg(BLOOMBERG_DIM).bg(BLOOMBERG_HEADER_BG),
+        ),
     ]))
-    .block(Block::default().borders(Borders::ALL));
+    .style(Style::default().bg(BLOOMBERG_HEADER_BG))
+    .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(BLOOMBERG_DIM)));
     frame.render_widget(header, vertical[0]);
 
+    // ── Body: 3-column layout ───────────────────────────────────────────────
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(24),
-            Constraint::Percentage(46),
-            Constraint::Percentage(30),
+            Constraint::Percentage(22),  // agents
+            Constraint::Percentage(44),  // worldline log
+            Constraint::Percentage(34),  // receipts
         ])
         .split(vertical[1]);
 
@@ -210,12 +226,26 @@ fn draw_ui(
     render_worldline_log(frame, body[1], worldline_log);
     render_receipts(frame, body[2], receipts, selected_receipt);
 
-    let footer = Paragraph::new(format!(
-        "S start/stop | R generate receipt card | V verify receipt | E export bundle | Q quit   [{}] {}",
-        if running { "running" } else { "stopped" },
-        status_line
-    ))
-    .block(Block::default().borders(Borders::ALL).title("Hotkeys"));
+    // ── Footer: status bar ──────────────────────────────────────────────────
+    let hotkeys = Line::from(vec![
+        Span::styled("[S]", Style::default().fg(BLOOMBERG_CYAN).add_modifier(Modifier::BOLD)),
+        Span::styled(" start/stop  ", Style::default().fg(BLOOMBERG_TEXT)),
+        Span::styled("[R]", Style::default().fg(BLOOMBERG_CYAN).add_modifier(Modifier::BOLD)),
+        Span::styled(" gen card  ", Style::default().fg(BLOOMBERG_TEXT)),
+        Span::styled("[V]", Style::default().fg(BLOOMBERG_CYAN).add_modifier(Modifier::BOLD)),
+        Span::styled(" verify  ", Style::default().fg(BLOOMBERG_TEXT)),
+        Span::styled("[E]", Style::default().fg(BLOOMBERG_CYAN).add_modifier(Modifier::BOLD)),
+        Span::styled(" export  ", Style::default().fg(BLOOMBERG_TEXT)),
+        Span::styled("[Q]", Style::default().fg(BLOOMBERG_AMBER).add_modifier(Modifier::BOLD)),
+        Span::styled(" quit   ", Style::default().fg(BLOOMBERG_TEXT)),
+        Span::styled("▶ ", Style::default().fg(BLOOMBERG_DIM)),
+        Span::styled(status_line, Style::default().fg(BLOOMBERG_GREEN)),
+    ]);
+    let footer = Paragraph::new(hotkeys)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled("Controls", Style::default().fg(BLOOMBERG_DIM)))
+            .border_style(Style::default().fg(BLOOMBERG_DIM)));
     frame.render_widget(footer, vertical[2]);
 }
 
@@ -223,24 +253,36 @@ fn render_agents(frame: &mut Frame<'_>, area: Rect, agents: &[openibank_maple::A
     let items: Vec<ListItem<'_>> = agents
         .iter()
         .map(|agent| {
-            let line = format!(
-                "{} | bal={} | permits={} | last={}",
-                agent.agent_id,
-                agent.balance,
-                agent.permits_count,
-                agent
-                    .last_worldline_event
-                    .as_deref()
-                    .unwrap_or("-")
-                    .split(':')
-                    .next_back()
-                    .unwrap_or("-")
-            );
+            let last = agent.last_worldline_event.as_deref().unwrap_or("-");
+            let last_short = last.split(':').next_back().unwrap_or("-");
+            let line = Line::from(vec![
+                Span::styled(
+                    format!("{:<14}", &agent.agent_id[..agent.agent_id.len().min(14)]),
+                    Style::default().fg(BLOOMBERG_CYAN),
+                ),
+                Span::styled(
+                    format!(" ${:<10}", agent.balance),
+                    Style::default().fg(BLOOMBERG_GREEN),
+                ),
+                Span::styled(
+                    format!(" p:{} ", agent.permits_count),
+                    Style::default().fg(BLOOMBERG_TEXT),
+                ),
+                Span::styled(
+                    short_hash(last_short),
+                    Style::default().fg(BLOOMBERG_DIM),
+                ),
+            ]);
             ListItem::new(line)
         })
         .collect();
 
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Agents"));
+    let list = List::new(items)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled("◈ Agents", Style::default().fg(BLOOMBERG_CYAN).add_modifier(Modifier::BOLD)))
+            .border_style(Style::default().fg(BLOOMBERG_DIM)))
+        .highlight_style(Style::default().bg(BLOOMBERG_HEADER_BG).add_modifier(Modifier::BOLD));
     frame.render_widget(list, area);
 }
 
@@ -251,21 +293,41 @@ fn render_worldline_log(
 ) {
     let items: Vec<ListItem<'_>> = worldline_log
         .iter()
-        .map(|event| {
-            ListItem::new(format!(
-                "{} | {} | {} | {}",
-                event.event_id,
-                event.agent_id,
-                event.event_type,
-                short_hash(&event.hash)
-            ))
+        .enumerate()
+        .map(|(idx, event)| {
+            // Alternate row shading with event type color
+            let type_color = match event.event_type.as_str() {
+                s if s.contains("Consequence") => BLOOMBERG_GREEN,
+                s if s.contains("Commitment") => BLOOMBERG_AMBER,
+                s if s.contains("Intent")     => BLOOMBERG_CYAN,
+                _                             => BLOOMBERG_TEXT,
+            };
+            let line = Line::from(vec![
+                Span::styled(
+                    format!("{:04} ", idx),
+                    Style::default().fg(BLOOMBERG_DIM),
+                ),
+                Span::styled(
+                    format!("{:<14} ", &event.agent_id[..event.agent_id.len().min(14)]),
+                    Style::default().fg(BLOOMBERG_CYAN),
+                ),
+                Span::styled(
+                    format!("{:<18} ", &event.event_type[..event.event_type.len().min(18)]),
+                    Style::default().fg(type_color),
+                ),
+                Span::styled(
+                    short_hash(&event.hash),
+                    Style::default().fg(BLOOMBERG_DIM),
+                ),
+            ]);
+            ListItem::new(line)
         })
         .collect();
-    let list = List::new(items).block(
-        Block::default()
+    let list = List::new(items)
+        .block(Block::default()
             .borders(Borders::ALL)
-            .title("WorldLine Log"),
-    );
+            .title(Span::styled("◈ WorldLine", Style::default().fg(BLOOMBERG_AMBER).add_modifier(Modifier::BOLD)))
+            .border_style(Style::default().fg(BLOOMBERG_DIM)));
     frame.render_widget(list, area);
 }
 
@@ -279,44 +341,65 @@ fn render_receipts(frame: &mut Frame<'_>, area: Rect, receipts: &[Receipt], sele
         .iter()
         .enumerate()
         .map(|(idx, receipt)| {
-            let marker = if idx == selected { ">" } else { " " };
-            ListItem::new(format!(
-                "{} {} | {} | {} -> {}",
-                marker, receipt.tx_id, receipt.amount, receipt.from, receipt.to
-            ))
+            let is_sel = idx == selected;
+            let verified = receipt.verify().is_ok();
+            let marker_color = if is_sel { BLOOMBERG_AMBER } else { BLOOMBERG_DIM };
+            let sig_color = if verified { BLOOMBERG_GREEN } else { BLOOMBERG_AMBER };
+            let line = Line::from(vec![
+                Span::styled(if is_sel { "▶ " } else { "  " }, Style::default().fg(marker_color)),
+                Span::styled(
+                    format!("{:.16}", receipt.tx_id),
+                    Style::default().fg(BLOOMBERG_CYAN),
+                ),
+                Span::styled(
+                    format!(" {}", receipt.amount),
+                    Style::default().fg(BLOOMBERG_GREEN).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    if verified { " ✓" } else { " ?" },
+                    Style::default().fg(sig_color),
+                ),
+            ]);
+            ListItem::new(line)
         })
         .collect();
     frame.render_widget(
-        List::new(items).block(Block::default().borders(Borders::ALL).title("Receipts")),
+        List::new(items).block(Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled("◈ Receipts", Style::default().fg(BLOOMBERG_GREEN).add_modifier(Modifier::BOLD)))
+            .border_style(Style::default().fg(BLOOMBERG_DIM))),
         split[0],
     );
 
     let details = receipts
         .get(selected)
         .map(receipt_details)
-        .unwrap_or_else(|| "No receipts yet".to_string());
+        .unwrap_or_else(|| "No receipts yet.\n\nPress S to start the demo\nor wait for transactions.".to_string());
     frame.render_widget(
-        Paragraph::new(details).block(
-            Block::default()
+        Paragraph::new(details)
+            .style(Style::default().fg(BLOOMBERG_TEXT))
+            .block(Block::default()
                 .borders(Borders::ALL)
-                .title("Receipt Detail"),
-        ),
+                .title(Span::styled("Receipt Detail", Style::default().fg(BLOOMBERG_DIM)))
+                .border_style(Style::default().fg(BLOOMBERG_DIM))),
         split[1],
     );
 }
 
 fn receipt_details(receipt: &Receipt) -> String {
+    let verified = receipt.verify().is_ok();
     format!(
-        "tx_id: {}\nverified: {}\namount: {}\nfrom->to: {} -> {}\npermit: {}\ncommitment: {}\nwll: {}\nsig: {}",
+        "ID:     {}\nSTATUS: {}\nAMOUNT: {}\nFROM:   {}\nTO:     {}\nPERMIT: {}\nCOMMIT: {}\nWLL:    {}\nSIG:    {}\nTIME:   {}",
         receipt.tx_id,
-        if receipt.verify().is_ok() { "yes" } else { "no" },
+        if verified { "✓ VERIFIED" } else { "✗ UNSIGNED" },
         receipt.amount,
         receipt.from,
         receipt.to,
-        receipt.permit_id,
-        receipt.commitment_id,
+        short_hash(&receipt.permit_id),
+        short_hash(&receipt.commitment_id),
         receipt.worldline_pointer(),
         short_hash(&receipt.receipt_sig),
+        receipt.timestamp.format("%Y-%m-%dT%H:%M:%SZ"),
     )
 }
 
